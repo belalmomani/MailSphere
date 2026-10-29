@@ -1,0 +1,120 @@
+package com.mailsphere.app.ui
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.mailsphere.app.data.DemoData
+import com.mailsphere.app.data.DemoMail
+import kotlinx.coroutines.delay
+
+@Composable
+fun InboxScreen(onOpenSearch: () -> Unit) {
+    var loading by remember { mutableStateOf(true) }
+    var filter by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        delay(700) // simulated loading to demonstrate the loading state
+        loading = false
+    }
+    val shown = DemoData.mails.filter {
+        when (filter) {
+            1 -> it.important
+            2 -> it.unread > 0
+            3 -> false // "follow-up" is not implemented yet -> shows the empty state
+            else -> true
+        }
+    }
+    val labels = listOf(tr("الكل", "All"), tr("مهم", "Important"), tr("غير مقروءة", "Unread"), tr("المتابعة", "Follow-up"))
+
+    Column(Modifier.fillMaxSize().screenInsets()) {
+        ScreenHeader(tr("صندوق البريد الموحد", "Unified Inbox"), tr("جميع حساباتك في مكان واحد", "All your accounts in one place"))
+        Column(Modifier.padding(horizontal = 16.dp)) {
+            DemoBanner()
+            Spacer(Modifier.height(12.dp))
+            Surface(
+                onClick = onOpenSearch,
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(10.dp))
+                    Text(tr("ابحث في الرسائل...", "Search messages..."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(labels.size) { i ->
+                FilterChip(selected = filter == i, onClick = { filter = i }, label = { Text(labels[i]) })
+            }
+        }
+        when {
+            loading -> LoadingState()
+            shown.isEmpty() -> EmptyState(
+                Icons.Filled.Email,
+                tr("لا توجد رسائل هنا", "No messages here"),
+                tr("هذا القسم لم يُنفَّذ بعد أو لا توجد رسائل مطابقة.", "This section is not implemented yet or has no matching messages.")
+            )
+            else -> LazyColumn {
+                items(shown) { mail ->
+                    MailRow(mail)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MailRow(mail: DemoMail) {
+    Row(Modifier.fillMaxWidth().clickable { }.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Avatar(mail.sender.first().toString(), mail.color)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(mail.sender, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(mail.time, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    mail.subject.t(), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    fontWeight = if (mail.unread > 0) FontWeight.SemiBold else FontWeight.Normal,
+                    modifier = Modifier.weight(1f)
+                )
+                if (mail.unread > 0) {
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        Modifier.size(22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center
+                    ) { Text(mail.unread.toString(), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                }
+            }
+            Text(
+                mail.preview.t(), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}

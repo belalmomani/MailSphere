@@ -1,0 +1,9 @@
+App name (EN): MailSphere
+App name (AR): ميل سفير
+Package: com.mailsphere.app
+Version name: 1.0.0
+Build number (versionCode): 1
+Build time: (filled automatically by the GitHub Actions build)
+Timezone: (filled automatically by the GitHub Actions build)
+Signing: (filled automatically by the GitHub Actions build)
+Changes: Phase 1 - UI shell: splash, add-account (demo), unified inbox, folders/categories, advanced search, attachments vault, "organize my mail" (simulation), settings. Demo data only; no real mail connection.
