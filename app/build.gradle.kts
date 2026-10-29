@@ -21,8 +21,8 @@ android {
         applicationId = "com.mailsphere.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.1.1"
         resourceConfigurations += listOf("ar", "en")
     }
 
@@ -69,6 +69,6 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.navigation:navigation-compose:2.8.2")
-    // Start.io ads (docs recommend 5.+; check the resolved version in the build log and pin it later)
-    implementation("com.startapp:inapp-sdk:5.+")
+    // Start.io ads. Pinned: 5.4.0 requires a newer AGP/compileSdk than this project uses.
+    implementation("com.startapp:inapp-sdk:5.3.1")
 }

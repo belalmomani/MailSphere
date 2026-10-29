@@ -1,8 +1,8 @@
 App name (EN): MailSphere
 App name (AR): ميل سفير
 Package: com.mailsphere.app
-Version name: 1.1.0
-Build number (versionCode): 2
+Version name: 1.1.1
+Build number (versionCode): 3
 Build time: (filled automatically by the GitHub Actions build)
 Timezone: (filled automatically by the GitHub Actions build)
 Signing: (filled automatically by the GitHub Actions build)
