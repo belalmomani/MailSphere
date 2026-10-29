@@ -1,7 +1,7 @@
 package com.mailsphere.app.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,27 +19,63 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mailsphere.app.data.AccountStore
 import com.mailsphere.app.data.DemoData
 import com.mailsphere.app.data.DemoMail
+import com.mailsphere.app.data.ImapClient
+import com.mailsphere.app.data.toDemoMail
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 @Composable
 fun InboxScreen(onOpenSearch: () -> Unit) {
+    val ctx = LocalContext.current
+    val accounts = remember { AccountStore.list(ctx) }
+    val isDemo = accounts.isEmpty()
     var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var refreshKey by remember { mutableIntStateOf(0) }
+    var real by remember { mutableStateOf<List<DemoMail>>(emptyList()) }
+    var partial by remember { mutableStateOf<String?>(null) }
     var filter by rememberSaveable { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) {
-        delay(700) // simulated loading to demonstrate the loading state
+
+    LaunchedEffect(refreshKey) {
+        loading = true
+        error = null
+        partial = null
+        if (isDemo) {
+            delay(700) // simulated loading for the demo state
+        } else {
+            val errors = mutableListOf<String>()
+            val result = withContext(Dispatchers.IO) {
+                accounts.flatMap { acc ->
+                    try {
+                        ImapClient.fetchLatest(acc)
+                    } catch (e: Exception) {
+                        errors.add(acc.email + ": " + (e.message ?: e.javaClass.simpleName))
+                        emptyList()
+                    }
+                }.sortedByDescending { it.dateMillis }.map { it.toDemoMail() }
+            }
+            real = result
+            if (result.isEmpty() && errors.isNotEmpty()) error = errors.first()
+            else if (errors.isNotEmpty()) partial = errors.first()
+        }
         loading = false
     }
-    val shown = DemoData.mails.filter {
+
+    val base = if (isDemo) DemoData.mails else real
+    val shown = base.filter {
         when (filter) {
             1 -> it.important
             2 -> it.unread > 0
-            3 -> false // "follow-up" is not implemented yet -> shows the empty state
+            3 -> false // "follow-up" is not implemented yet
             else -> true
         }
     }
@@ -47,7 +84,17 @@ fun InboxScreen(onOpenSearch: () -> Unit) {
     Column(Modifier.fillMaxSize().screenInsets()) {
         ScreenHeader(tr("صندوق البريد الموحد", "Unified Inbox"), tr("جميع حساباتك في مكان واحد", "All your accounts in one place"))
         Column(Modifier.padding(horizontal = 16.dp)) {
-            DemoBanner()
+            if (isDemo) DemoBanner() else Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    tr("${accounts.size} حساب متصل — آخر 30 رسالة لكل حساب", "${accounts.size} account(s) connected — latest 30 messages each"),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = { refreshKey++ }) { Icon(Icons.Filled.Refresh, tr("تحديث", "Refresh")) }
+            }
+            partial?.let {
+                Text(tr("تعذّر تحديث بعض الحسابات: ", "Some accounts failed: ") + it.take(80), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
             Spacer(Modifier.height(12.dp))
             Surface(
                 onClick = onOpenSearch,
@@ -72,6 +119,7 @@ fun InboxScreen(onOpenSearch: () -> Unit) {
         }
         when {
             loading -> LoadingState()
+            error != null -> ErrorState(error ?: "") { refreshKey++ }
             shown.isEmpty() -> EmptyState(
                 Icons.Filled.Email,
                 tr("لا توجد رسائل هنا", "No messages here"),
@@ -79,7 +127,7 @@ fun InboxScreen(onOpenSearch: () -> Unit) {
             )
             else -> LazyColumn {
                 items(shown) { mail ->
-                    MailRow(mail)
+                    MailRow(mail, dotOnly = !isDemo)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
                 }
             }
@@ -88,13 +136,13 @@ fun InboxScreen(onOpenSearch: () -> Unit) {
 }
 
 @Composable
-fun MailRow(mail: DemoMail) {
+fun MailRow(mail: DemoMail, dotOnly: Boolean = false) {
     Row(Modifier.fillMaxWidth().clickable { }.padding(horizontal = 16.dp, vertical = 12.dp)) {
-        Avatar(mail.sender.first().toString(), mail.color)
+        Avatar(mail.sender.firstOrNull()?.uppercase() ?: "?", mail.color)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(mail.sender, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(mail.sender, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Text(mail.time, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -105,16 +153,22 @@ fun MailRow(mail: DemoMail) {
                 )
                 if (mail.unread > 0) {
                     Spacer(Modifier.width(8.dp))
-                    Box(
-                        Modifier.size(22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
-                        contentAlignment = Alignment.Center
-                    ) { Text(mail.unread.toString(), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                    if (dotOnly) {
+                        Box(Modifier.size(10.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
+                    } else {
+                        Box(
+                            Modifier.size(22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                        ) { Text(mail.unread.toString(), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                    }
                 }
             }
-            Text(
-                mail.preview.t(), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (mail.preview.t().isNotBlank()) {
+                Text(
+                    mail.preview.t(), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

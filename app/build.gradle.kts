@@ -21,8 +21,8 @@ android {
         applicationId = "com.mailsphere.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.1.1"
+        versionCode = 4
+        versionName = "1.2.0"
         resourceConfigurations += listOf("ar", "en")
     }
 
@@ -53,6 +53,11 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+    packaging {
+        resources {
+            excludes += setOf("META-INF/NOTICE.md", "META-INF/LICENSE.md", "META-INF/NOTICE", "META-INF/LICENSE", "META-INF/DEPENDENCIES")
+        }
+    }
     lint {
         checkReleaseBuilds = false
         abortOnError = false
@@ -71,4 +76,8 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.8.2")
     // Start.io ads. Pinned: 5.4.0 requires a newer AGP/compileSdk than this project uses.
     implementation("com.startapp:inapp-sdk:5.3.1")
+    // Phase 3: IMAP mail access + encrypted credential storage
+    implementation("com.sun.mail:android-mail:1.6.7")
+    implementation("com.sun.mail:android-activation:1.6.7")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 }

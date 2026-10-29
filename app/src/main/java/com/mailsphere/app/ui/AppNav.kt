@@ -91,10 +91,17 @@ fun MailSphereApp(themeMode: Int, onThemeMode: (Int) -> Unit) {
                 WelcomeScreen(
                     canGoBack = nav.previousBackStackEntry != null,
                     onBack = { nav.popBackStack() },
-                    onExplore = { nav.navigate("inbox") { popUpTo(nav.graph.id) { inclusive = true } } }
+                    onExplore = { nav.navigate("inbox") { popUpTo(nav.graph.id) { inclusive = true } } },
+                    onAddAccount = { nav.navigate("addaccount") }
                 )
             }
             composable("inbox") { InboxScreen(onOpenSearch = { nav.navigate("search") }) }
+            composable("addaccount") {
+                AddAccountScreen(
+                    onBack = { nav.popBackStack() },
+                    onDone = { nav.navigate("inbox") { popUpTo(nav.graph.id) { inclusive = true } } }
+                )
+            }
             composable("folders") { FoldersScreen() }
             composable("vault") { VaultScreen() }
             composable("search") {
@@ -109,7 +116,7 @@ fun MailSphereApp(themeMode: Int, onThemeMode: (Int) -> Unit) {
                 SettingsScreen(
                     themeMode = themeMode,
                     onThemeMode = onThemeMode,
-                    onAddAccount = { nav.navigate("welcome") },
+                    onAddAccount = { nav.navigate("addaccount") },
                     onOpenSearch = { nav.navigate("search") },
                     onOpenOrganize = { nav.navigate("organize") }
                 )

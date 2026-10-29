@@ -1,9 +1,9 @@
 App name (EN): MailSphere
 App name (AR): ميل سفير
 Package: com.mailsphere.app
-Version name: 1.1.1
-Build number (versionCode): 3
+Version name: 1.2.0
+Build number (versionCode): 4
 Build time: (filled automatically by the GitHub Actions build)
 Timezone: (filled automatically by the GitHub Actions build)
 Signing: (filled automatically by the GitHub Actions build)
-Changes: Phase 2 - Start.io interstitial ads (app ID 209910571, TEST mode ON, max 3/day, shown only when leaving Search/Organize). Phase 1 - UI shell: splash, add-account (demo), unified inbox, folders/categories, advanced search, attachments vault, "organize my mail" (simulation), settings. Demo data only; no real mail connection.
+Changes: Phase 3 - real IMAP accounts (app password; Gmail/Yahoo/iCloud/custom), encrypted storage, real inbox fetch (latest 30/account, read-only). Phase 2 - Start.io interstitial ads (app ID 209910571, TEST mode ON, max 3/day, shown only when leaving Search/Organize). Phase 1 - UI shell: splash, add-account (demo), unified inbox, folders/categories, advanced search, attachments vault, "organize my mail" (simulation), settings. Demo data only; no real mail connection.

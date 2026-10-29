@@ -43,8 +43,7 @@ fun SplashScreen(onDone: () -> Unit) {
 }
 
 @Composable
-fun WelcomeScreen(canGoBack: Boolean, onBack: () -> Unit, onExplore: () -> Unit) {
-    var showDialog by remember { mutableStateOf(false) }
+fun WelcomeScreen(canGoBack: Boolean, onBack: () -> Unit, onExplore: () -> Unit, onAddAccount: () -> Unit) {
     val providers = listOf(
         Triple("Gmail", "gmail.com", Color(0xFFEA4335)),
         Triple("Yahoo", "yahoo.com", Color(0xFF6001D2)),
@@ -79,7 +78,7 @@ fun WelcomeScreen(canGoBack: Boolean, onBack: () -> Unit, onExplore: () -> Unit)
         ) {
             Column(Modifier.padding(16.dp)) {
                 Button(
-                    onClick = { showDialog = true },
+                    onClick = { onAddAccount() },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(14.dp)
                 ) {
@@ -90,7 +89,7 @@ fun WelcomeScreen(canGoBack: Boolean, onBack: () -> Unit, onExplore: () -> Unit)
                 Spacer(Modifier.height(12.dp))
                 providers.forEach { (name, domain, color) ->
                     Row(
-                        Modifier.fillMaxWidth().clickable { showDialog = true }.padding(vertical = 10.dp),
+                        Modifier.fillMaxWidth().clickable { onAddAccount() }.padding(vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Avatar(name.first().toString(), color, 40.dp)
@@ -111,19 +110,5 @@ fun WelcomeScreen(canGoBack: Boolean, onBack: () -> Unit, onExplore: () -> Unit)
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
         ) { Text(tr("استكشاف التطبيق ببيانات تجريبية", "Explore the app with demo data")) }
-    }
-
-    if (showDialog) {
-        AlertDialog(
-            onDismissRequest = { showDialog = false },
-            confirmButton = { TextButton(onClick = { showDialog = false }) { Text(tr("حسنًا", "OK")) } },
-            title = { Text(tr("غير متاح بعد", "Not available yet")) },
-            text = {
-                Text(tr(
-                    "ربط حسابات البريد الفعلية لم يُنفَّذ بعد وسيأتي في مرحلة لاحقة. يمكنك الآن استكشاف التطبيق ببيانات تجريبية.",
-                    "Connecting real email accounts is not implemented yet and will come in a later phase. You can explore the app with demo data now."
-                ))
-            }
-        )
     }
 }
