@@ -23,4 +23,6 @@
 Android Studio (Koala أو أحدث) ← Open ← Sync ← Build APK. أو: `gradle assembleRelease` (Gradle 8.9 وJDK 17).
 
 ## الإعلانات (Start.io)
-غير مفعّلة. يوجد فقط `ads/AdFrequencyLimiter.kt` (حد 3 مرات يوميًا للجهاز، قابل للتعديل من `AdsConfig`) ولا يوجد SDK ولا معرّف تطبيق.
+مدمجة (المرحلة 2). المعرّف في `res/values/ads.xml`. المفاتيح في `ads/AdFrequencyLimiter.kt` ← `AdsConfig`:
+`ADS_ENABLED` (تفعيل/تعطيل)، `TEST_MODE` (إعلانات تجريبية؛ اجعلها `false` للإعلانات الحقيقية)، `MAX_IMPRESSIONS_PER_DAY` (3)، `MIN_INTERVAL_MS`.
+لا تضغط على إعلاناتك الحقيقية أثناء الاختبار.

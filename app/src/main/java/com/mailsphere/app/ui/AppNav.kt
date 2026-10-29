@@ -1,6 +1,8 @@
 package com.mailsphere.app.ui
 
 import android.app.Activity
+import androidx.activity.compose.BackHandler
+import com.mailsphere.app.ads.AdManager
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -54,6 +56,9 @@ fun MailSphereApp(themeMode: Int, onThemeMode: (Int) -> Unit) {
         c.isAppearanceLightNavigationBars = !dark && !onGradient
     }
 
+    // Leaving a task screen = natural pause where an ad is allowed (limits are enforced in AdManager).
+    val leaveTask = { nav.popBackStack(); AdManager.maybeShow() }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = MaterialTheme.colorScheme.background,
@@ -92,8 +97,14 @@ fun MailSphereApp(themeMode: Int, onThemeMode: (Int) -> Unit) {
             composable("inbox") { InboxScreen(onOpenSearch = { nav.navigate("search") }) }
             composable("folders") { FoldersScreen() }
             composable("vault") { VaultScreen() }
-            composable("search") { SearchScreen(onBack = { nav.popBackStack() }) }
-            composable("organize") { OrganizeScreen(onBack = { nav.popBackStack() }) }
+            composable("search") {
+                BackHandler(onBack = leaveTask)
+                SearchScreen(onBack = leaveTask)
+            }
+            composable("organize") {
+                BackHandler(onBack = leaveTask)
+                OrganizeScreen(onBack = leaveTask)
+            }
             composable("settings") {
                 SettingsScreen(
                     themeMode = themeMode,

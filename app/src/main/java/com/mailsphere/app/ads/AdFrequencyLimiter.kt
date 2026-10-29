@@ -5,10 +5,16 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Ads are NOT active in phase 1: no SDK, no ad unit ID. This only prepares the daily-cap logic. */
+/** Central ads switches. Change here (one place). */
 object AdsConfig {
-    const val ADS_ENABLED = false
+    /** Master switch: false = SDK is never initialized and no ad is ever shown. */
+    const val ADS_ENABLED = true
+    /** true = Start.io TEST ads (use while testing; set to false for real ads). */
+    const val TEST_MODE = true
+    /** Max ad impressions per device per day (not simultaneous ads). */
     const val MAX_IMPRESSIONS_PER_DAY = 3
+    /** Minimum gap between two ads. */
+    const val MIN_INTERVAL_MS = 3 * 60 * 1000L
 }
 
 /** Caps ad impressions per device per day; the counter survives app restarts (SharedPreferences). */

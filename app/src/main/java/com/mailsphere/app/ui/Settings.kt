@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.os.LocaleListCompat
+import com.mailsphere.app.ads.AdsConfig
 
 @Composable
 fun SettingsScreen(
@@ -29,6 +30,12 @@ fun SettingsScreen(
     val isAr = LocalConfiguration.current.locales[0].language == "ar"
     val ctx = LocalContext.current
     val version = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "?" } catch (e: Exception) { "?" }
+
+    val adsText = when {
+        !AdsConfig.ADS_ENABLED -> tr("غير مفعّلة", "Disabled")
+        AdsConfig.TEST_MODE -> tr("مفعّلة — إعلانات تجريبية (حد ${AdsConfig.MAX_IMPRESSIONS_PER_DAY} يوميًا)", "Enabled — TEST ads (max ${AdsConfig.MAX_IMPRESSIONS_PER_DAY}/day)")
+        else -> tr("مفعّلة — حد ${AdsConfig.MAX_IMPRESSIONS_PER_DAY} يوميًا", "Enabled — max ${AdsConfig.MAX_IMPRESSIONS_PER_DAY}/day")
+    }
 
     Column(Modifier.fillMaxSize().screenInsets().verticalScroll(rememberScrollState())) {
         ScreenHeader(tr("الإعدادات", "Settings"))
@@ -53,8 +60,8 @@ fun SettingsScreen(
 
         SectionLabel(tr("الخصوصية والإعلانات", "Privacy & ads"))
         SettingRow(Icons.Filled.Lock, tr("الخصوصية", "Privacy"),
-            tr("لا يجمع التطبيق أي بيانات ولا يطلب أي صلاحيات في هذه المرحلة", "In this phase the app collects no data and requests no permissions"), null)
-        SettingRow(Icons.Filled.Campaign, tr("الإعلانات", "Ads"), tr("غير مفعّلة في هذه المرحلة", "Not enabled in this phase"), null)
+            tr("لا يقرأ التطبيق بريدك بعد. حزمة الإعلانات (Start.io) قد تستخدم معرّف الإعلانات.", "The app does not read your mail yet. The ads SDK (Start.io) may use the advertising ID."), null)
+        SettingRow(Icons.Filled.Campaign, tr("الإعلانات", "Ads"), adsText, null)
 
         SectionLabel(tr("حول", "About"))
         SettingRow(Icons.Filled.Info, "MailSphere / ميل سفير", tr("الإصدار $version", "Version $version"), null)
