@@ -1,9 +1,9 @@
 App name (EN): MailSphere
 App name (AR): ميل سفير
 Package: com.mailsphere.app
-Version name: 1.5.0
-Build number (versionCode): 7
+Version name: 1.6.0
+Build number (versionCode): 8
 Build time: (filled automatically by the GitHub Actions build)
 Timezone: (filled automatically by the GitHub Actions build)
 Signing: (filled automatically by the GitHub Actions build)
-Changes: Phase 6 - compose/reply/forward/send via SMTP (SSL/STARTTLS, password or OAuth). Microsoft needs re-sign-in for SMTP.Send. Phase 5 - open & read a real message (read-only, JS off, remote content blocked until you tap Load), app-password guide for Yahoo/iCloud. Phase 4 - OAuth sign-in (Google, Microsoft) via AppAuth + IMAP XOAUTH2; buttons stay disabled until client IDs are set in res/values/oauth.xml. Phase 3 - real IMAP accounts (app password; Gmail/Yahoo/iCloud/custom), encrypted storage, real inbox fetch (latest 30/account, read-only). Phase 2 - Start.io interstitial ads (app ID 209910571, TEST mode ON, max 3/day, shown only when leaving Search/Organize). Phase 1 - UI shell: splash, add-account (demo), unified inbox, folders/categories, advanced search, attachments vault, "organize my mail" (simulation), settings. Demo data only; no real mail connection.
+Changes: Phase 7 - virtual folders from real mail: senders, keyword-based categories (approximate), year/month; real Organize my mail (analyzes up to 500 headers/account, session cache only). Phase 6 - compose/reply/forward/send via SMTP (SSL/STARTTLS, password or OAuth). Microsoft needs re-sign-in for SMTP.Send. Phase 5 - open & read a real message (read-only, JS off, remote content blocked until you tap Load), app-password guide for Yahoo/iCloud. Phase 4 - OAuth sign-in (Google, Microsoft) via AppAuth + IMAP XOAUTH2; buttons stay disabled until client IDs are set in res/values/oauth.xml. Phase 3 - real IMAP accounts (app password; Gmail/Yahoo/iCloud/custom), encrypted storage, real inbox fetch (latest 30/account, read-only). Phase 2 - Start.io interstitial ads (app ID 209910571, TEST mode ON, max 3/day, shown only when leaving Search/Organize). Phase 1 - UI shell: splash, add-account (demo), unified inbox, folders/categories, advanced search, attachments vault, "organize my mail" (simulation), settings. Demo data only; no real mail connection.

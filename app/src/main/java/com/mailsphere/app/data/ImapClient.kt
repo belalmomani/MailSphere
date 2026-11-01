@@ -20,7 +20,7 @@ import javax.mail.internet.InternetAddress
 
 data class MailItem(
     val sender: String, val subject: String, val dateMillis: Long, val unread: Boolean, val time: String,
-    val uid: Long = 0, val account: String = ""
+    val uid: Long = 0, val account: String = "", val senderAddress: String = ""
 )
 
 data class MailBody(
@@ -87,7 +87,8 @@ object ImapClient {
                         unread = !m.isSet(Flags.Flag.SEEN),
                         time = formatTime(date),
                         uid = uidFolder.getUID(m),
-                        account = acc.email
+                        account = acc.email,
+                        senderAddress = from?.address ?: ""
                     )
                 }
             } finally {

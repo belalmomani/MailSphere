@@ -130,7 +130,23 @@ fun MailSphereApp(themeMode: Int, onThemeMode: (Int) -> Unit) {
                     onOpenGuide = { nav.navigate("guide") }
                 )
             }
-            composable("folders") { FoldersScreen() }
+            composable("folders") {
+                FoldersScreen(onOpenList = { type, key -> nav.navigate("list/" + type + "/" + Uri.encode(key)) })
+            }
+            composable(
+                "list/{type}/{key}",
+                arguments = listOf(
+                    navArgument("type") { type = NavType.StringType },
+                    navArgument("key") { type = NavType.StringType }
+                )
+            ) { entry ->
+                FolderListScreen(
+                    type = entry.arguments?.getString("type") ?: "",
+                    key = entry.arguments?.getString("key") ?: "",
+                    onBack = { nav.popBackStack() },
+                    onOpenMessage = { e, u -> nav.navigate("message/" + Uri.encode(e) + "/" + u) }
+                )
+            }
             composable("vault") { VaultScreen() }
             composable("search") {
                 BackHandler(onBack = leaveTask)
@@ -138,7 +154,16 @@ fun MailSphereApp(themeMode: Int, onThemeMode: (Int) -> Unit) {
             }
             composable("organize") {
                 BackHandler(onBack = leaveTask)
-                OrganizeScreen(onBack = leaveTask)
+                OrganizeScreen(
+                    onBack = leaveTask,
+                    onOpenFolders = {
+                        nav.navigate("folders") {
+                            popUpTo("inbox") { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
             }
             composable("settings") {
                 SettingsScreen(
