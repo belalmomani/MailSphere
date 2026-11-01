@@ -15,5 +15,5 @@
 1. https://entra.microsoft.com ← App registrations ← New registration: الاسم MailSphere، النوع: *Accounts in any organizational directory and personal Microsoft accounts*.
 2. Authentication ← Add platform ← **Mobile and desktop applications** ← Custom redirect URI: `com.mailsphere.app://oauth2redirect`.
 3. Authentication ← **Allow public client flows = Yes**.
-4. API permissions ← Add ← APIs my organization uses ← **Office 365 Exchange Online** ← Delegated ← `IMAP.AccessAsUser.All`، مع Microsoft Graph: `openid` و`email` و`offline_access` و`profile`.
+4. API permissions ← Add ← APIs my organization uses ← **Office 365 Exchange Online** ← Delegated ← `IMAP.AccessAsUser.All` و`SMTP.Send`، مع Microsoft Graph: `openid` و`email` و`offline_access` و`profile`.
 5. انسخ Application (client) ID وضعه في `microsoft_client_id`.

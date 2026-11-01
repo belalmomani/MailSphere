@@ -13,6 +13,7 @@ import javax.mail.Multipart
 import javax.mail.Part
 import javax.mail.Session
 import javax.mail.UIDFolder
+import javax.mail.internet.MimeMessage
 import javax.mail.internet.MimeUtility
 import javax.mail.Store
 import javax.mail.internet.InternetAddress
@@ -24,7 +25,8 @@ data class MailItem(
 
 data class MailBody(
     val subject: String, val from: String, val date: String,
-    val html: String?, val text: String?, val attachments: List<String>
+    val html: String?, val text: String?, val attachments: List<String>,
+    val replyAddress: String = "", val messageId: String? = null
 )
 
 private val palette = listOf(0xFF3B82F6, 0xFF10A37F, 0xFFF59E0B, 0xFFEF4444, 0xFF6366F1, 0xFF0EA5E9, 0xFFF97316, 0xFF64748B)
@@ -144,7 +146,10 @@ object ImapClient {
                     date = if (date == null) "" else SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(date),
                     html = html.toString().takeIf { it.isNotBlank() }?.take(600_000),
                     text = text.toString().takeIf { it.isNotBlank() }?.take(600_000),
-                    attachments = att
+                    attachments = att,
+                    replyAddress = (m.replyTo?.firstOrNull() as? InternetAddress)?.address
+                        ?: (m.from?.firstOrNull() as? InternetAddress)?.address ?: "",
+                    messageId = (m as? MimeMessage)?.messageID
                 )
             } finally {
                 inbox.close(false)

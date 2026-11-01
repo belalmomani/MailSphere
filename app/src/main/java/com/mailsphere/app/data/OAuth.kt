@@ -31,7 +31,7 @@ object OAuth {
             Uri.parse(if (google) "https://oauth2.googleapis.com/token" else "https://login.microsoftonline.com/common/oauth2/v2.0/token")
         )
         val scope = if (google) "openid email https://mail.google.com/"
-        else "openid email offline_access https://outlook.office.com/IMAP.AccessAsUser.All"
+        else "openid email offline_access https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send"
         val redirect = if (google) "com.mailsphere.app:/oauth2redirect" else "com.mailsphere.app://oauth2redirect"
         return AuthorizationRequest.Builder(cfg, clientId(ctx, provider), ResponseTypeValues.CODE, Uri.parse(redirect))
             .setScope(scope)

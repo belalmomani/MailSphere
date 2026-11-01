@@ -16,6 +16,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.text.HtmlCompat
+import com.mailsphere.app.data.ComposeDraft
 import com.mailsphere.app.data.AccountStore
 import com.mailsphere.app.data.ImapClient
 import com.mailsphere.app.data.MailBody
@@ -24,7 +26,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
-fun MessageScreen(email: String, uid: Long, onBack: () -> Unit) {
+fun MessageScreen(email: String, uid: Long, onBack: () -> Unit, onCompose: () -> Unit) {
     val ctx = LocalContext.current
     var body by remember { mutableStateOf<MailBody?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -66,6 +68,29 @@ fun MessageScreen(email: String, uid: Long, onBack: () -> Unit) {
                                 tr(" — التنزيل في مرحلة لاحقة", " — download comes in a later phase"),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    val plainText = (b.text ?: HtmlCompat.fromHtml(b.html ?: "", HtmlCompat.FROM_HTML_MODE_LEGACY).toString()).take(20000)
+                    val wroteLine = tr("في ${b.date}، كتب ${b.from}:", "On ${b.date}, ${b.from} wrote:")
+                    val fwdTitle = tr("رسالة محوّلة", "Forwarded message")
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = {
+                            ComposeDraft.reset()
+                            ComposeDraft.from = email
+                            ComposeDraft.to = b.replyAddress
+                            ComposeDraft.subject = if (b.subject.startsWith("Re:", ignoreCase = true)) b.subject else "Re: " + b.subject
+                            ComposeDraft.body = "\n\n" + wroteLine + "\n" + plainText.lines().joinToString("\n") { "> " + it }
+                            ComposeDraft.inReplyTo = b.messageId
+                            onCompose()
+                        }) { Text(tr("رد", "Reply")) }
+                        OutlinedButton(onClick = {
+                            ComposeDraft.reset()
+                            ComposeDraft.from = email
+                            ComposeDraft.subject = if (b.subject.startsWith("Fwd:", ignoreCase = true)) b.subject else "Fwd: " + b.subject
+                            ComposeDraft.body = "\n\n---------- " + fwdTitle + " ----------\nFrom: " + b.from + "\nDate: " + b.date +
+                                "\nSubject: " + b.subject + "\n\n" + plainText
+                            onCompose()
+                        }) { Text(tr("توجيه", "Forward")) }
                     }
                     if (b.html != null && !loadImages) {
                         Spacer(Modifier.height(8.dp))

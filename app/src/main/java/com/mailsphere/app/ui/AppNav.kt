@@ -101,7 +101,8 @@ fun MailSphereApp(themeMode: Int, onThemeMode: (Int) -> Unit) {
             composable("inbox") {
                 InboxScreen(
                     onOpenSearch = { nav.navigate("search") },
-                    onOpenMessage = { email, uid -> nav.navigate("message/" + Uri.encode(email) + "/" + uid) }
+                    onOpenMessage = { email, uid -> nav.navigate("message/" + Uri.encode(email) + "/" + uid) },
+                    onCompose = { nav.navigate("compose") }
                 )
             }
             composable(
@@ -114,8 +115,12 @@ fun MailSphereApp(themeMode: Int, onThemeMode: (Int) -> Unit) {
                 MessageScreen(
                     email = entry.arguments?.getString("email") ?: "",
                     uid = entry.arguments?.getLong("uid") ?: 0L,
-                    onBack = { nav.popBackStack() }
+                    onBack = { nav.popBackStack() },
+                    onCompose = { nav.navigate("compose") }
                 )
+            }
+            composable("compose") {
+                ComposeScreen(onBack = { nav.popBackStack() }, onSent = { nav.popBackStack() })
             }
             composable("guide") { GuideScreen(onBack = { nav.popBackStack() }) }
             composable("addaccount") {

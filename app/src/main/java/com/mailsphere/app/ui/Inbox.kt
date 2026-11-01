@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -25,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mailsphere.app.data.AccountStore
+import com.mailsphere.app.data.ComposeDraft
 import com.mailsphere.app.data.DemoData
 import com.mailsphere.app.data.DemoMail
 import com.mailsphere.app.data.ImapClient
@@ -35,7 +37,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 @Composable
-fun InboxScreen(onOpenSearch: () -> Unit, onOpenMessage: (String, Long) -> Unit) {
+fun InboxScreen(onOpenSearch: () -> Unit, onOpenMessage: (String, Long) -> Unit, onCompose: () -> Unit) {
     val ctx = LocalContext.current
     val accounts = remember { AccountStore.list(ctx) }
     val isDemo = accounts.isEmpty()
@@ -83,6 +85,7 @@ fun InboxScreen(onOpenSearch: () -> Unit, onOpenMessage: (String, Long) -> Unit)
     }
     val labels = listOf(tr("الكل", "All"), tr("مهم", "Important"), tr("غير مقروءة", "Unread"), tr("المتابعة", "Follow-up"))
 
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().screenInsets()) {
         ScreenHeader(tr("صندوق البريد الموحد", "Unified Inbox"), tr("جميع حساباتك في مكان واحد", "All your accounts in one place"))
         Column(Modifier.padding(horizontal = 16.dp)) {
@@ -135,6 +138,13 @@ fun InboxScreen(onOpenSearch: () -> Unit, onOpenMessage: (String, Long) -> Unit)
                 }
             }
         }
+    }
+    if (!isDemo) {
+        FloatingActionButton(
+            onClick = { ComposeDraft.reset(); onCompose() },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+        ) { Icon(Icons.Filled.Edit, tr("رسالة جديدة", "New message")) }
+    }
     }
 }
 
