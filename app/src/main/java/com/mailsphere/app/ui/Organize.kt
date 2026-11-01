@@ -20,8 +20,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.platform.LocalContext
 import com.mailsphere.app.data.AccountStore
-import com.mailsphere.app.data.MailRepo
-import com.mailsphere.app.data.Organizer
+import com.mailsphere.app.data.MailDb
+import com.mailsphere.app.data.SyncManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -102,10 +104,10 @@ fun OrganizeScreen(onBack: () -> Unit, onOpenFolders: () -> Unit) {
 @Composable
 private fun RealOrganize(onBack: () -> Unit, onOpenFolders: () -> Unit) {
     val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var phase by remember { mutableIntStateOf(0) } // 0 idle, 1 running, 2 done
-    var error by remember { mutableStateOf<String?>(null) }
-    var stats by remember { mutableStateOf(listOf(0, 0, 0, 0)) }
+    var stats by remember { mutableStateOf(listOf(0, 0, 0)) }
+    LaunchedEffect(SyncManager.lastFinished, SyncManager.done / 1500) {
+        stats = withContext(Dispatchers.IO) { MailDb.get(ctx).stats() }
+    }
 
     Column(Modifier.fillMaxSize().screenInsets(bottom = true)) {
         ScreenHeader(tr("رتّب بريدي بالكامل", "Organize my whole mail"), onBack = onBack)
@@ -119,56 +121,49 @@ private fun RealOrganize(onBack: () -> Unit, onOpenFolders: () -> Unit) {
                 contentAlignment = Alignment.Center
             ) { Icon(Icons.Filled.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(56.dp)) }
             Text(
-                tr("سيحلّل التطبيق آخر 500 رسالة من كل حساب ويبني مجلدات الجهات والتصنيفات والتواريخ داخل التطبيق.",
-                    "The app will analyze the latest 500 messages of each account and build sender, category and date folders inside the app."),
+                tr("سيقرأ التطبيق عناوين كل رسائل صندوق الوارد في حساباتك، من الأقدم إلى الأحدث، ويبني لكل جهة (مثل GitHub) مجلدات السنوات والأشهر داخلها.",
+                    "The app reads the headers of ALL inbox messages in your accounts, oldest first, and builds year and month folders inside each sender (e.g. GitHub)."),
                 textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold
             )
-            when (phase) {
-                0 -> Button(
-                    onClick = {
-                        phase = 1
-                        error = null
-                        scope.launch {
-                            val e = MailRepo.loadAll(ctx, 500)
-                            if (e != null) {
-                                error = e
-                                phase = 0
-                            } else {
-                                val it = MailRepo.items
-                                stats = listOf(
-                                    it.size,
-                                    Organizer.senderGroups(it).size,
-                                    Organizer.categoryGroups(it).size,
-                                    Organizer.monthGroups(it).size
-                                )
-                                phase = 2
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)
-                ) { Text(tr("بدء التنظيم", "Start organizing"), fontWeight = FontWeight.Bold) }
-                1 -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    LinearProgressIndicator(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)))
+            if (stats[0] > 0) {
+                Text(
+                    tr("مرتّب حاليًا: ${stats[0]} رسالة من ${stats[1]} جهة عبر ${stats[2]} سنة.", "Organized so far: ${stats[0]} messages from ${stats[1]} senders over ${stats[2]} years."),
+                    color = Color(0xFF16A34A), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
+                )
+            }
+            if (SyncManager.running) {
+                val frac = if (SyncManager.total > 0) SyncManager.done.toFloat() / SyncManager.total else 0f
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    LinearProgressIndicator(progress = { frac }, modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)))
                     Spacer(Modifier.height(8.dp))
-                    Text(tr("جارٍ التحليل... قد يستغرق دقيقة", "Analyzing... this may take a minute"), style = MaterialTheme.typography.bodySmall)
-                }
-                else -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("${SyncManager.done} / ${SyncManager.total} — ${SyncManager.current}", style = MaterialTheme.typography.bodySmall)
                     Text(
-                        tr("حُلّلت ${stats[0]} رسالة: ${stats[1]} جهة، ${stats[2]} تصنيف، ${stats[3]} شهر.",
-                            "Analyzed ${stats[0]} messages: ${stats[1]} senders, ${stats[2]} categories, ${stats[3]} months."),
-                        fontWeight = FontWeight.Bold, color = Color(0xFF16A34A), textAlign = TextAlign.Center
+                        tr("أبقِ التطبيق مفتوحًا. يمكنك التنقل بين الشاشات؛ والتقدم يُحفظ ويمكن استئنافه.", "Keep the app open. You can move between screens; progress is saved and can be resumed."),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center
                     )
-                    Spacer(Modifier.height(12.dp))
-                    Button(onClick = onOpenFolders, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(14.dp)) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = { SyncManager.cancel() }) { Text(tr("إيقاف", "Stop")) }
+                }
+            } else {
+                Button(
+                    onClick = { SyncManager.start(ctx) },
+                    modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text(
+                        if (stats[0] == 0) tr("بدء ترتيب كل الرسائل", "Start organizing all messages") else tr("تحديث (الرسائل الجديدة / استئناف)", "Update (new messages / resume)"),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                if (stats[0] > 0) {
+                    OutlinedButton(onClick = onOpenFolders, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(14.dp)) {
                         Text(tr("عرض المجلدات", "View folders"))
                     }
-                    OutlinedButton(onClick = { phase = 0 }) { Text(tr("إعادة التحليل", "Analyze again")) }
                 }
             }
-            error?.let { Text(it.take(140), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            SyncManager.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             Text(
-                tr("المجلدات افتراضية داخل التطبيق فقط؛ لا يُنقل ولا يُحذف أي شيء من بريدك.",
-                    "Folders are virtual, inside the app only; nothing in your mailbox is moved or deleted."),
+                tr("المجلدات افتراضية داخل التطبيق فقط؛ لا يُنقل ولا يُحذف أي شيء من بريدك. تُخزَّن العناوين (المرسل والموضوع والتاريخ) على جهازك فقط، ولا يُخزَّن نص الرسائل. تُحمَّل رسائل صندوق الوارد فقط (ليس الأرشيف ولا المرسلة ولا البريد المزعج).",
+                    "Folders are virtual, inside the app only; nothing in your mailbox is moved or deleted. Headers (sender, subject, date) are stored on your device only; message bodies are not stored. Only the Inbox is read (not archive, sent or spam)."),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center
             )
             Spacer(Modifier.height(16.dp))

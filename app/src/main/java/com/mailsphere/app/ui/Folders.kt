@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -25,81 +24,97 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mailsphere.app.data.AccountStore
 import com.mailsphere.app.data.DemoData
-import com.mailsphere.app.data.MailRepo
+import com.mailsphere.app.data.Group
+import com.mailsphere.app.data.MailDb
 import com.mailsphere.app.data.Organizer
+import com.mailsphere.app.data.SyncManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
-fun FoldersScreen(onOpenList: (String, String) -> Unit) {
+fun FoldersScreen(
+    onOpenTree: (String, String) -> Unit,
+    onOpenMonth: (String, String, String) -> Unit,
+    onOpenOrganize: () -> Unit
+) {
     val ctx = LocalContext.current
     val isDemo = remember { AccountStore.list(ctx).isEmpty() }
-    if (isDemo) DemoFolders() else RealFolders(onOpenList)
+    if (isDemo) DemoFolders() else RealFolders(onOpenTree, onOpenMonth, onOpenOrganize)
 }
 
 @Composable
-private fun RealFolders(onOpenList: (String, String) -> Unit) {
+private fun RealFolders(
+    onOpenTree: (String, String) -> Unit,
+    onOpenMonth: (String, String, String) -> Unit,
+    onOpenOrganize: () -> Unit
+) {
     val ctx = LocalContext.current
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    var loading by remember { mutableStateOf(MailRepo.items.isEmpty()) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var refreshKey by remember { mutableIntStateOf(0) }
-    LaunchedEffect(refreshKey) {
-        if (MailRepo.items.isEmpty() || refreshKey > 0) {
-            loading = true
-            error = MailRepo.loadAll(ctx)
+    var senders by remember { mutableStateOf<List<Group>>(emptyList()) }
+    var cats by remember { mutableStateOf<List<Group>>(emptyList()) }
+    var total by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(SyncManager.lastFinished, SyncManager.done / 1500) {
+        withContext(Dispatchers.IO) {
+            val db = MailDb.get(ctx)
+            senders = db.topGroups("sender")
+            cats = db.topGroups("cat")
+            total = db.count()
         }
-        loading = false
     }
-    val items = MailRepo.items
-    val senders = remember(items) { Organizer.senderGroups(items) }
-    val cats = remember(items) { Organizer.categoryGroups(items) }
-    val months = remember(items) { Organizer.monthGroups(items) }
     val tabs = listOf(tr("الجهات", "Senders"), tr("التصنيفات", "Categories"), tr("التواريخ", "Dates"))
 
     Column(Modifier.fillMaxSize().screenInsets()) {
         ScreenHeader(tr("المجلدات والتصنيفات", "Folders & categories"))
-        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                tr("مجلدات افتراضية داخل التطبيق من آخر 200 رسالة لكل حساب (يمكنك توسيعها من «رتّب بريدي»). التصنيف بقواعد كلمات بسيطة وتقريبي.",
-                    "Virtual folders built in the app from the latest 200 messages per account (extend it from “Organize my mail”). Categories use simple keyword rules and are approximate."),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
-            )
-            IconButton(onClick = { refreshKey++ }) { Icon(Icons.Filled.Refresh, tr("تحديث", "Refresh")) }
+        if (SyncManager.running) {
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                val frac = if (SyncManager.total > 0) SyncManager.done.toFloat() / SyncManager.total else 0f
+                LinearProgressIndicator(progress = { frac }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)))
+                Text(
+                    tr("جارٍ ترتيب بريدك: ${SyncManager.done} / ${SyncManager.total}", "Organizing your mail: ${SyncManager.done} / ${SyncManager.total}"),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else if (total > 0) {
+            Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    tr("$total رسالة مرتّبة. التصنيف بكلمات مفتاحية وهو تقريبي.", "$total messages organized. Categories use keywords and are approximate."),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = { SyncManager.start(ctx) }) { Icon(Icons.Filled.Refresh, tr("تحديث", "Update")) }
+            }
         }
-        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(tabs.size) { i -> FilterChip(selected = tab == i, onClick = { tab = i }, label = { Text(tabs[i]) }) }
-        }
-        when {
-            loading -> LoadingState()
-            error != null -> ErrorState(error ?: "") { refreshKey++ }
-            items.isEmpty() -> EmptyState(Icons.Filled.Folder, tr("لا توجد رسائل", "No messages"), tr("لم يُعثر على رسائل في الحسابات المتصلة.", "No messages were found in the connected accounts."))
-            else -> LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
-                when (tab) {
-                    0 -> items(senders) { g ->
-                        FolderRow(g.count, g.label, { onOpenList("sender", g.key) }) { Avatar(g.label.firstOrNull()?.uppercase() ?: "?", Color(0xFF3B82F6), 40.dp) }
+        if (total == 0 && !SyncManager.running) {
+            EmptyState(Icons.Filled.Folder, tr("لم يُرتَّب بريدك بعد", "Your mail is not organized yet"), tr("اضغط الزر لبدء ترتيب كل رسائلك.", "Tap the button to organize all your messages."))
+            Box(Modifier.fillMaxWidth().padding(horizontal = 32.dp)) {
+                Button(onClick = onOpenOrganize, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(14.dp)) {
+                    Text(tr("رتّب بريدي بالكامل", "Organize my whole mail"))
+                }
+            }
+        } else {
+            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(tabs.size) { i -> FilterChip(selected = tab == i, onClick = { tab = i }, label = { Text(tabs[i]) }) }
+            }
+            when (tab) {
+                0 -> LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
+                    items(senders) { g ->
+                        val label = if (g.key.contains('@')) g.label.ifBlank { g.key } else g.key.replaceFirstChar { it.uppercase() }
+                        FolderRow(g.count, label, { onOpenTree("sender", g.key) }) {
+                            Avatar(label.firstOrNull()?.uppercase() ?: "?", Color(0xFF3B82F6), 40.dp)
+                        }
                     }
-                    1 -> items(cats) { g ->
+                }
+                1 -> LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
+                    items(cats) { g ->
                         val c = Organizer.byKey(g.key)
-                        FolderRow(g.count, c.title.t(), { onOpenList("cat", g.key) }) {
+                        FolderRow(g.count, c.title.t(), { onOpenTree("cat", g.key) }) {
                             Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(c.color), contentAlignment = Alignment.Center) {
                                 Icon(c.icon, null, tint = Color.White, modifier = Modifier.size(22.dp))
                             }
                         }
                     }
-                    else -> {
-                        val byYear = months.groupBy { it.key.take(4) }
-                        byYear.forEach { (year, list) ->
-                            item { SectionLabel(year + "  (" + list.sumOf { it.count } + ")") }
-                            items(list) { g ->
-                                FolderRow(g.count, g.key, { onOpenList("month", g.key) }) {
-                                    Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-                                        Icon(Icons.Filled.CalendarMonth, null, tint = MaterialTheme.colorScheme.primary)
-                                    }
-                                }
-                            }
-                        }
-                    }
                 }
+                else -> YearMonthTree("all", "_") { ym -> onOpenMonth("all", "_", ym) }
             }
         }
     }
@@ -129,7 +144,7 @@ private fun DemoFolders() {
 }
 
 @Composable
-private fun FolderRow(count: Int, title: String, onClick: (() -> Unit)?, leading: @Composable () -> Unit) {
+internal fun FolderRow(count: Int, title: String, onClick: (() -> Unit)?, leading: @Composable () -> Unit) {
     Row(
         Modifier.fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)

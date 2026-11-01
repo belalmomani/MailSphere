@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.mailsphere.app.data.AccountStore
+import com.mailsphere.app.data.MailDb
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -85,7 +86,7 @@ fun SettingsScreen(
             title = { Text(tr("إزالة الحساب؟", "Remove account?")) },
             text = { Text(email + "\n" + tr("ستُحذف بيانات الدخول من هذا الجهاز. لن تُحذف أي رسائل من خادم بريدك.", "Credentials will be deleted from this device. No messages are deleted from your mail server.")) },
             confirmButton = {
-                TextButton(onClick = { AccountStore.remove(ctx, email); accounts = AccountStore.list(ctx); toRemove = null }) { Text(tr("إزالة", "Remove")) }
+                TextButton(onClick = { AccountStore.remove(ctx, email); MailDb.get(ctx).deleteAccount(email); accounts = AccountStore.list(ctx); toRemove = null }) { Text(tr("إزالة", "Remove")) }
             },
             dismissButton = { TextButton(onClick = { toRemove = null }) { Text(tr("إلغاء", "Cancel")) } }
         )

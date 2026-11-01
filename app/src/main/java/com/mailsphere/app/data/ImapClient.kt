@@ -160,6 +160,53 @@ object ImapClient {
         }
     }
 
+    /** Indexes every INBOX message with UID greater than the last stored one (oldest first, chunks of 300). */
+    fun syncAccount(
+        acc: Account, token: String?, db: MailDb,
+        alive: () -> Boolean, onTotal: (Int) -> Unit, onProgress: (Int) -> Unit
+    ) {
+        val store = connect(acc, token)
+        try {
+            val inbox = store.getFolder("INBOX")
+            inbox.open(Folder.READ_ONLY)
+            try {
+                val uf = inbox as UIDFolder
+                val maxUid = db.maxUid(acc.email)
+                val msgs = uf.getMessagesByUID(maxUid + 1, UIDFolder.LASTUID)
+                onTotal(msgs.size)
+                for (chunk in msgs.toList().chunked(300)) {
+                    if (!alive()) return
+                    val arr = chunk.toTypedArray()
+                    val fp = FetchProfile()
+                    fp.add(FetchProfile.Item.ENVELOPE)
+                    fp.add(FetchProfile.Item.FLAGS)
+                    fp.add(UIDFolder.FetchProfileItem.UID)
+                    inbox.fetch(arr, fp)
+                    val items = arr.map { m ->
+                        val from = m.from?.firstOrNull() as? InternetAddress
+                        val date: Date? = m.sentDate ?: m.receivedDate
+                        MailItem(
+                            sender = from?.personal?.takeIf { it.isNotBlank() } ?: from?.address ?: "?",
+                            subject = m.subject ?: "",
+                            dateMillis = date?.time ?: 0L,
+                            unread = !m.isSet(Flags.Flag.SEEN),
+                            time = "",
+                            uid = uf.getUID(m),
+                            account = acc.email,
+                            senderAddress = from?.address ?: ""
+                        )
+                    }
+                    db.insert(acc.email, items)
+                    onProgress(arr.size)
+                }
+            } finally {
+                inbox.close(false)
+            }
+        } finally {
+            store.close()
+        }
+    }
+
     private fun formatTime(d: Date?): String {
         if (d == null) return ""
         val a = Calendar.getInstance().apply { time = d }
@@ -167,4 +214,13 @@ object ImapClient {
         val sameDay = a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
         return SimpleDateFormat(if (sameDay) "HH:mm" else "dd/MM", Locale.US).format(d)
     }
+}
+
+fun formatShortDate(millis: Long): String {
+    if (millis == 0L) return ""
+    val d = Date(millis)
+    val a = Calendar.getInstance().apply { time = d }
+    val b = Calendar.getInstance()
+    val sameDay = a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
+    return SimpleDateFormat(if (sameDay) "HH:mm" else "yyyy-MM-dd", Locale.US).format(d)
 }

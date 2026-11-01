@@ -131,18 +131,39 @@ fun MailSphereApp(themeMode: Int, onThemeMode: (Int) -> Unit) {
                 )
             }
             composable("folders") {
-                FoldersScreen(onOpenList = { type, key -> nav.navigate("list/" + type + "/" + Uri.encode(key)) })
+                FoldersScreen(
+                    onOpenTree = { type, key -> nav.navigate("tree/" + type + "/" + Uri.encode(key)) },
+                    onOpenMonth = { type, key, ym -> nav.navigate("msgs/" + type + "/" + Uri.encode(key) + "/" + ym) },
+                    onOpenOrganize = { nav.navigate("organize") }
+                )
             }
             composable(
-                "list/{type}/{key}",
+                "tree/{type}/{key}",
                 arguments = listOf(
                     navArgument("type") { type = NavType.StringType },
                     navArgument("key") { type = NavType.StringType }
                 )
             ) { entry ->
-                FolderListScreen(
+                val t = entry.arguments?.getString("type") ?: ""
+                val k = entry.arguments?.getString("key") ?: ""
+                TreeScreen(
+                    type = t, key = k,
+                    onBack = { nav.popBackStack() },
+                    onOpenMonth = { ym -> nav.navigate("msgs/" + t + "/" + Uri.encode(k) + "/" + ym) }
+                )
+            }
+            composable(
+                "msgs/{type}/{key}/{ym}",
+                arguments = listOf(
+                    navArgument("type") { type = NavType.StringType },
+                    navArgument("key") { type = NavType.StringType },
+                    navArgument("ym") { type = NavType.StringType }
+                )
+            ) { entry ->
+                MonthMessagesScreen(
                     type = entry.arguments?.getString("type") ?: "",
                     key = entry.arguments?.getString("key") ?: "",
+                    ym = entry.arguments?.getString("ym") ?: "",
                     onBack = { nav.popBackStack() },
                     onOpenMessage = { e, u -> nav.navigate("message/" + Uri.encode(e) + "/" + u) }
                 )
