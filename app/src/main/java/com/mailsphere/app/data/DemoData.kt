@@ -16,7 +16,9 @@ data class DemoMail(
     val time: String,
     val unread: Int,
     val color: Color,
-    val important: Boolean = false
+    val important: Boolean = false,
+    val account: String? = null,
+    val uid: Long = 0
 )
 
 data class DemoCategory(val icon: ImageVector, val title: Bi, val count: Int, val color: Color)

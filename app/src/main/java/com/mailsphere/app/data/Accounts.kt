@@ -7,7 +7,15 @@ import androidx.security.crypto.MasterKey
 import org.json.JSONArray
 import org.json.JSONObject
 
-data class Account(val email: String, val host: String, val port: Int, val password: String)
+/** provider: "password" (IMAP app password), "google" or "microsoft" (OAuth; authState = AppAuth AuthState JSON). */
+data class Account(
+    val email: String,
+    val host: String,
+    val port: Int,
+    val password: String,
+    val provider: String = "password",
+    val authState: String? = null
+)
 
 data class Preset(val host: String, val port: Int, val supported: Boolean = true)
 
@@ -40,7 +48,11 @@ object AccountStore {
         val arr = JSONArray(prefs(ctx).getString("accounts", "[]"))
         (0 until arr.length()).map {
             val o = arr.getJSONObject(it)
-            Account(o.getString("email"), o.getString("host"), o.getInt("port"), o.getString("password"))
+            Account(
+                o.getString("email"), o.getString("host"), o.getInt("port"), o.getString("password"),
+                o.optString("provider", "password"),
+                if (o.has("authState")) o.getString("authState") else null
+            )
         }
     } catch (e: Exception) {
         emptyList()
@@ -49,7 +61,9 @@ object AccountStore {
     private fun save(ctx: Context, accounts: List<Account>) {
         val arr = JSONArray()
         accounts.forEach {
-            arr.put(JSONObject().put("email", it.email).put("host", it.host).put("port", it.port).put("password", it.password))
+            val o = JSONObject().put("email", it.email).put("host", it.host).put("port", it.port).put("password", it.password).put("provider", it.provider)
+            if (it.authState != null) o.put("authState", it.authState)
+            arr.put(o)
         }
         prefs(ctx).edit().putString("accounts", arr.toString()).apply()
     }

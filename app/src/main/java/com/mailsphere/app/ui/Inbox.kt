@@ -28,13 +28,14 @@ import com.mailsphere.app.data.AccountStore
 import com.mailsphere.app.data.DemoData
 import com.mailsphere.app.data.DemoMail
 import com.mailsphere.app.data.ImapClient
+import com.mailsphere.app.data.OAuth
 import com.mailsphere.app.data.toDemoMail
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 @Composable
-fun InboxScreen(onOpenSearch: () -> Unit) {
+fun InboxScreen(onOpenSearch: () -> Unit, onOpenMessage: (String, Long) -> Unit) {
     val ctx = LocalContext.current
     val accounts = remember { AccountStore.list(ctx) }
     val isDemo = accounts.isEmpty()
@@ -56,7 +57,8 @@ fun InboxScreen(onOpenSearch: () -> Unit) {
             val result = withContext(Dispatchers.IO) {
                 accounts.flatMap { acc ->
                     try {
-                        ImapClient.fetchLatest(acc)
+                        val token = if (acc.authState != null) OAuth.accessToken(ctx, acc) else null
+                        ImapClient.fetchLatest(acc, token)
                     } catch (e: Exception) {
                         errors.add(acc.email + ": " + (e.message ?: e.javaClass.simpleName))
                         emptyList()
@@ -127,7 +129,8 @@ fun InboxScreen(onOpenSearch: () -> Unit) {
             )
             else -> LazyColumn {
                 items(shown) { mail ->
-                    MailRow(mail, dotOnly = !isDemo)
+                    val click: (() -> Unit)? = if (isDemo) null else mail.account?.let { a -> { onOpenMessage(a, mail.uid) } }
+                    MailRow(mail, dotOnly = !isDemo, onClick = click)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
                 }
             }
@@ -136,8 +139,12 @@ fun InboxScreen(onOpenSearch: () -> Unit) {
 }
 
 @Composable
-fun MailRow(mail: DemoMail, dotOnly: Boolean = false) {
-    Row(Modifier.fillMaxWidth().clickable { }.padding(horizontal = 16.dp, vertical = 12.dp)) {
+fun MailRow(mail: DemoMail, dotOnly: Boolean = false, onClick: (() -> Unit)? = null) {
+    Row(
+        Modifier.fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
         Avatar(mail.sender.firstOrNull()?.uppercase() ?: "?", mail.color)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {

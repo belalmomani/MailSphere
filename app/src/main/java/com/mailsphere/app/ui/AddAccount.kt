@@ -1,5 +1,7 @@
 package com.mailsphere.app.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,14 +19,19 @@ import androidx.compose.ui.unit.dp
 import com.mailsphere.app.data.Account
 import com.mailsphere.app.data.AccountStore
 import com.mailsphere.app.data.ImapClient
+import com.mailsphere.app.data.OAuth
 import com.mailsphere.app.data.Providers
+import net.openid.appauth.AuthState
+import net.openid.appauth.AuthorizationException
+import net.openid.appauth.AuthorizationResponse
+import net.openid.appauth.AuthorizationService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.mail.AuthenticationFailedException
 
 @Composable
-fun AddAccountScreen(onBack: () -> Unit, onDone: () -> Unit) {
+fun AddAccountScreen(onBack: () -> Unit, onDone: () -> Unit, onOpenGuide: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var email by rememberSaveable { mutableStateOf("") }
@@ -33,6 +40,45 @@ fun AddAccountScreen(onBack: () -> Unit, onDone: () -> Unit) {
     var port by rememberSaveable { mutableStateOf("993") }
     var busy by remember { mutableStateOf(false) }
     var failure by remember { mutableStateOf<Exception?>(null) }
+
+    // ---- OAuth sign-in (Google / Microsoft) ----
+    val service = remember { AuthorizationService(ctx) }
+    DisposableEffect(Unit) { onDispose { service.dispose() } }
+    var pendingProvider by remember { mutableStateOf<String?>(null) }
+    var signInError by remember { mutableStateOf<String?>(null) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val data = result.data
+        val resp = data?.let { AuthorizationResponse.fromIntent(it) }
+        val ex = data?.let { AuthorizationException.fromIntent(it) }
+        val provider = pendingProvider
+        if (resp == null || provider == null) {
+            signInError = if (ex == null) "cancelled" else (ex.errorDescription ?: ex.error ?: "error")
+            busy = false
+        } else {
+            busy = true
+            val state = AuthState(resp, ex)
+            service.performTokenRequest(resp.createTokenExchangeRequest()) { tokenResp, tokenEx ->
+                state.update(tokenResp, tokenEx)
+                val email = OAuth.emailFromIdToken(tokenResp?.idToken)
+                if (tokenResp == null || email == null) {
+                    signInError = if (tokenResp == null) (tokenEx?.errorDescription ?: tokenEx?.error ?: "error") else "noemail"
+                    busy = false
+                } else {
+                    val (host, port) = OAuth.imapHost(provider)
+                    AccountStore.add(ctx, Account(email.lowercase(), host, port, "", provider, state.jsonSerializeString()))
+                    busy = false
+                    onDone()
+                }
+            }
+        }
+    }
+    val startSignIn: (String) -> Unit = { provider ->
+        pendingProvider = provider
+        signInError = null
+        launcher.launch(service.getAuthorizationRequestIntent(OAuth.request(ctx, provider)))
+    }
+    val googleReady = OAuth.clientId(ctx, "google").isNotBlank()
+    val msReady = OAuth.clientId(ctx, "microsoft").isNotBlank()
 
     val preset = Providers.presetFor(email.trim())
     val hasAt = email.contains("@")
@@ -50,6 +96,32 @@ fun AddAccountScreen(onBack: () -> Unit, onDone: () -> Unit) {
             Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            Text(tr("تسجيل الدخول السريع", "Quick sign-in"), fontWeight = FontWeight.Bold)
+            Button(
+                onClick = { startSignIn("google") }, enabled = googleReady && !busy,
+                modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)
+            ) { Text(tr("المتابعة بحساب Google (Gmail)", "Continue with Google (Gmail)"), fontWeight = FontWeight.Bold) }
+            Button(
+                onClick = { startSignIn("microsoft") }, enabled = msReady && !busy,
+                modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)
+            ) { Text(tr("المتابعة بحساب Microsoft (Outlook / Hotmail)", "Continue with Microsoft (Outlook / Hotmail)"), fontWeight = FontWeight.Bold) }
+            if (!googleReady || !msReady) {
+                Text(
+                    tr("الزر المعطّل لم يُضبط بعد (معرّف العميل غير مُدخل).", "A disabled button is not configured yet (client ID missing)."),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            signInError?.let { code ->
+                val msg = when (code) {
+                    "cancelled" -> tr("تم الإلغاء.", "Cancelled.")
+                    "noemail" -> tr("تعذّر قراءة البريد من الحساب.", "Could not read the email from the account.")
+                    else -> tr("فشل تسجيل الدخول: ", "Sign-in failed: ") + code.take(120)
+                }
+                Text(msg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            HorizontalDivider()
+            Text(tr("متقدم: كلمة مرور التطبيق", "Advanced: app password"), fontWeight = FontWeight.Bold)
+            TextButton(onClick = onOpenGuide) { Text(tr("كيف أنشئ كلمة مرور التطبيق؟ (Yahoo / iCloud)", "How do I create an app password? (Yahoo / iCloud)")) }
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(14.dp)) {
                 Text(
                     tr(

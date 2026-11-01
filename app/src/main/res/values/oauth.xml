@@ -1,0 +1,5 @@
+<resources>
+    <!-- Public OAuth client IDs (NOT secrets). Leave empty until you create them; the matching sign-in button stays disabled. -->
+    <string name="google_client_id" translatable="false"></string>
+    <string name="microsoft_client_id" translatable="false"></string>
+</resources>

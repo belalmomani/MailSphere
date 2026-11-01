@@ -24,10 +24,13 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import android.net.Uri
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.mailsphere.app.data.Bi
 
 private data class Tab(val route: String, val icon: ImageVector, val label: Bi)
@@ -95,11 +98,31 @@ fun MailSphereApp(themeMode: Int, onThemeMode: (Int) -> Unit) {
                     onAddAccount = { nav.navigate("addaccount") }
                 )
             }
-            composable("inbox") { InboxScreen(onOpenSearch = { nav.navigate("search") }) }
+            composable("inbox") {
+                InboxScreen(
+                    onOpenSearch = { nav.navigate("search") },
+                    onOpenMessage = { email, uid -> nav.navigate("message/" + Uri.encode(email) + "/" + uid) }
+                )
+            }
+            composable(
+                "message/{email}/{uid}",
+                arguments = listOf(
+                    navArgument("email") { type = NavType.StringType },
+                    navArgument("uid") { type = NavType.LongType }
+                )
+            ) { entry ->
+                MessageScreen(
+                    email = entry.arguments?.getString("email") ?: "",
+                    uid = entry.arguments?.getLong("uid") ?: 0L,
+                    onBack = { nav.popBackStack() }
+                )
+            }
+            composable("guide") { GuideScreen(onBack = { nav.popBackStack() }) }
             composable("addaccount") {
                 AddAccountScreen(
                     onBack = { nav.popBackStack() },
-                    onDone = { nav.navigate("inbox") { popUpTo(nav.graph.id) { inclusive = true } } }
+                    onDone = { nav.navigate("inbox") { popUpTo(nav.graph.id) { inclusive = true } } },
+                    onOpenGuide = { nav.navigate("guide") }
                 )
             }
             composable("folders") { FoldersScreen() }
