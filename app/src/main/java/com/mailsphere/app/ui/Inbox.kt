@@ -94,6 +94,7 @@ fun InboxScreen(onOpenSearch: () -> Unit, onOpenMessage: (String, Long) -> Unit,
             else -> true
         }
     }
+    val inboxLabel = tr("صندوق الوارد", "Inbox")
     val labels = listOf(tr("الكل", "All"), tr("مهم", "Important"), tr("غير مقروءة", "Unread"), tr("المتابعة", "Follow-up"))
     fun keyOf(m: DemoMail) = (m.account ?: "") + "|" + m.uid
     fun toggle(k: String) {
@@ -110,7 +111,7 @@ fun InboxScreen(onOpenSearch: () -> Unit, onOpenMessage: (String, Long) -> Unit,
                     onDelete = {
                         flow.request(
                             selected.map { it.substringBefore('|') to it.substringAfter('|').toLong() },
-                            tr("صندوق الوارد", "Inbox")
+                            inboxLabel
                         )
                     }
                 )

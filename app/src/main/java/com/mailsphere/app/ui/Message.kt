@@ -35,6 +35,7 @@ fun MessageScreen(email: String, uid: Long, onBack: () -> Unit, onCompose: () ->
     var loadImages by remember { mutableStateOf(false) }
 
     val flow = rememberDeleteFlow { err -> if (err == null) onBack() }
+    val thisMessageLabel = tr("هذه الرسالة", "this message")
 
     LaunchedEffect(retry) {
         loading = true
@@ -94,7 +95,7 @@ fun MessageScreen(email: String, uid: Long, onBack: () -> Unit, onCompose: () ->
                             onCompose()
                         }) { Text(tr("توجيه", "Forward")) }
                         OutlinedButton(
-                            onClick = { flow.request(listOf(email to uid), tr("هذه الرسالة", "this message")) },
+                            onClick = { flow.request(listOf(email to uid), thisMessageLabel) },
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                         ) { Text(tr("حذف", "Delete")) }
                     }

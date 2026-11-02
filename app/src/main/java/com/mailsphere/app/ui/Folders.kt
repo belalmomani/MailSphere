@@ -70,6 +70,7 @@ private fun RealFolders(
         }
     }
     val tabs = listOf(tr("الجهات", "Senders"), tr("التصنيفات", "Categories"), tr("التواريخ", "Dates"))
+    val selectedFoldersLabel = tr("المجلدات المحددة", "the selected folders")
 
     Column(Modifier.fillMaxSize().screenInsets()) {
         if (selecting) {
@@ -80,7 +81,7 @@ private fun RealFolders(
                 onDelete = {
                     flow.requestFolders(
                         selected.map { Triple(if (tab == 1) "cat" else "sender", it, null) },
-                        tr("المجلدات المحددة", "the selected folders")
+                        selectedFoldersLabel
                     )
                 }
             )
