@@ -217,11 +217,11 @@ object ImapClient {
     }
 
     /**
-     * Moves messages (by UID) from INBOX to the provider's Trash folder: copy to Trash, flag, then expunge only these messages.
-     * Never deletes permanently. If no Trash folder is found nothing is touched. [onChunkDone] is called after each
-     * chunk of 100 succeeded on the server.
+     * Moves ONE chunk of messages (by UID) from INBOX to the provider's Trash using a fresh connection, then re-opens the
+     * INBOX and VERIFIES which UIDs are really gone. Returns the UIDs confirmed gone (including ones that no longer existed).
+     * Never deletes permanently; if no Trash folder is found nothing is touched.
      */
-    fun moveToTrash(acc: Account, token: String?, uids: List<Long>, onChunkDone: (List<Long>) -> Unit) {
+    fun moveChunk(acc: Account, token: String?, chunk: List<Long>): List<Long> {
         val store = connect(acc, token)
         try {
             val trash = findTrash(store) ?: throw IllegalStateException("Trash folder not found - nothing was deleted")
@@ -229,21 +229,28 @@ object ImapClient {
             inbox.open(Folder.READ_WRITE)
             try {
                 val uf = inbox as UIDFolder
-                for (chunk in uids.chunked(100)) {
-                    val msgs = uf.getMessagesByUID(chunk.toLongArray()).filterNotNull().toTypedArray()
-                    if (msgs.isNotEmpty()) {
-                        inbox.copyMessages(msgs, trash)
-                        inbox.setFlags(msgs, Flags(Flags.Flag.DELETED), true)
-                        try {
-                            (inbox as IMAPFolder).expunge(msgs)
-                        } catch (e: Exception) {
-                            inbox.expunge()
-                        }
+                val msgs = uf.getMessagesByUID(chunk.toLongArray()).filterNotNull().toTypedArray()
+                if (msgs.isNotEmpty()) {
+                    inbox.copyMessages(msgs, trash)
+                    inbox.setFlags(msgs, Flags(Flags.Flag.DELETED), true)
+                    try {
+                        (inbox as IMAPFolder).expunge(msgs)
+                    } catch (e: Exception) {
+                        inbox.expunge()
                     }
-                    onChunkDone(chunk)
                 }
             } finally {
                 inbox.close(false)
+            }
+            // Verify with a brand-new folder object (no cached state).
+            val check = store.getFolder("INBOX")
+            check.open(Folder.READ_ONLY)
+            try {
+                val cf = check as UIDFolder
+                val still = cf.getMessagesByUID(chunk.toLongArray()).filterNotNull().map { cf.getUID(it) }.toSet()
+                return chunk.filter { it !in still }
+            } finally {
+                check.close(false)
             }
         } finally {
             store.close()
