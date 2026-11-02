@@ -34,6 +34,8 @@ fun MessageScreen(email: String, uid: Long, onBack: () -> Unit, onCompose: () ->
     var retry by remember { mutableIntStateOf(0) }
     var loadImages by remember { mutableStateOf(false) }
 
+    val flow = rememberDeleteFlow { err -> if (err == null) onBack() }
+
     LaunchedEffect(retry) {
         loading = true
         error = null
@@ -91,6 +93,10 @@ fun MessageScreen(email: String, uid: Long, onBack: () -> Unit, onCompose: () ->
                                 "\nSubject: " + b.subject + "\n\n" + plainText
                             onCompose()
                         }) { Text(tr("توجيه", "Forward")) }
+                        OutlinedButton(
+                            onClick = { flow.request(listOf(email to uid), tr("هذه الرسالة", "this message")) },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) { Text(tr("حذف", "Delete")) }
                     }
                     if (b.html != null && !loadImages) {
                         Spacer(Modifier.height(8.dp))
@@ -149,4 +155,5 @@ fun MessageScreen(email: String, uid: Long, onBack: () -> Unit, onCompose: () ->
             }
         }
     }
+    flow.Dialogs()
 }

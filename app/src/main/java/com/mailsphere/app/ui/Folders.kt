@@ -1,7 +1,9 @@
 package com.mailsphere.app.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -11,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -24,6 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mailsphere.app.data.AccountStore
 import com.mailsphere.app.data.DemoData
+import com.mailsphere.app.data.Deleter
 import com.mailsphere.app.data.Group
 import com.mailsphere.app.data.MailDb
 import com.mailsphere.app.data.Organizer
@@ -53,7 +57,11 @@ private fun RealFolders(
     var senders by remember { mutableStateOf<List<Group>>(emptyList()) }
     var cats by remember { mutableStateOf<List<Group>>(emptyList()) }
     var total by remember { mutableIntStateOf(-1) }
-    LaunchedEffect(SyncManager.lastFinished, SyncManager.done / 1500) {
+    val selected = remember { mutableStateListOf<String>() }
+    val selecting = selected.isNotEmpty()
+    BackHandler(enabled = selecting) { selected.clear() }
+    val flow = rememberDeleteFlow { selected.clear() }
+    LaunchedEffect(SyncManager.lastFinished, SyncManager.done / 1500, Deleter.version) {
         withContext(Dispatchers.IO) {
             val db = MailDb.get(ctx)
             senders = db.topGroups("sender")
@@ -64,7 +72,21 @@ private fun RealFolders(
     val tabs = listOf(tr("الجهات", "Senders"), tr("التصنيفات", "Categories"), tr("التواريخ", "Dates"))
 
     Column(Modifier.fillMaxSize().screenInsets()) {
-        ScreenHeader(tr("المجلدات والتصنيفات", "Folders & categories"))
+        if (selecting) {
+            SelectionBar(
+                count = selected.size,
+                onCancel = { selected.clear() },
+                onSelectAll = { selected.clear(); selected.addAll((if (tab == 1) cats else senders).map { it.key }) },
+                onDelete = {
+                    flow.requestFolders(
+                        selected.map { Triple(if (tab == 1) "cat" else "sender", it, null) },
+                        tr("المجلدات المحددة", "the selected folders")
+                    )
+                }
+            )
+        } else {
+            ScreenHeader(tr("المجلدات والتصنيفات", "Folders & categories"))
+        }
         if (SyncManager.running) {
             Column(Modifier.padding(horizontal = 16.dp)) {
                 val frac = if (SyncManager.total > 0) SyncManager.done.toFloat() / SyncManager.total else 0f
@@ -77,7 +99,7 @@ private fun RealFolders(
         } else if (total > 0) {
             Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    tr("$total رسالة مرتّبة. التصنيف بكلمات مفتاحية وهو تقريبي.", "$total messages organized. Categories use keywords and are approximate."),
+                    tr("$total رسالة مرتّبة. اضغط مطولًا على مجلد لتحديده وحذفه. التصنيف تقريبي.", "$total messages organized. Long-press a folder to select and delete. Categories are approximate."),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f)
                 )
@@ -93,13 +115,18 @@ private fun RealFolders(
             }
         } else {
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(tabs.size) { i -> FilterChip(selected = tab == i, onClick = { tab = i }, label = { Text(tabs[i]) }) }
+                items(tabs.size) { i -> FilterChip(selected = tab == i, onClick = { tab = i; selected.clear() }, label = { Text(tabs[i]) }) }
             }
             when (tab) {
                 0 -> LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
                     items(senders) { g ->
                         val label = if (g.key.contains('@')) g.label.ifBlank { g.key } else g.key.replaceFirstChar { it.uppercase() }
-                        FolderRow(g.count, label, { onOpenTree("sender", g.key) }) {
+                        FolderRow(
+                            g.count, label,
+                            onClick = { if (selecting) { if (g.key in selected) selected.remove(g.key) else selected.add(g.key) } else onOpenTree("sender", g.key) },
+                            selected = if (selecting) (g.key in selected) else null,
+                            onLongClick = { if (g.key in selected) selected.remove(g.key) else selected.add(g.key) }
+                        ) {
                             Avatar(label.firstOrNull()?.uppercase() ?: "?", Color(0xFF3B82F6), 40.dp)
                         }
                     }
@@ -107,17 +134,23 @@ private fun RealFolders(
                 1 -> LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
                     items(cats) { g ->
                         val c = Organizer.byKey(g.key)
-                        FolderRow(g.count, c.title.t(), { onOpenTree("cat", g.key) }) {
+                        FolderRow(
+                            g.count, c.title.t(),
+                            onClick = { if (selecting) { if (g.key in selected) selected.remove(g.key) else selected.add(g.key) } else onOpenTree("cat", g.key) },
+                            selected = if (selecting) (g.key in selected) else null,
+                            onLongClick = { if (g.key in selected) selected.remove(g.key) else selected.add(g.key) }
+                        ) {
                             Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(c.color), contentAlignment = Alignment.Center) {
                                 Icon(c.icon, null, tint = Color.White, modifier = Modifier.size(22.dp))
                             }
                         }
                     }
                 }
-                else -> YearMonthTree("all", "_") { ym -> onOpenMonth("all", "_", ym) }
+                else -> YearMonthTree("all", "_", tr("كل البريد", "All mail")) { ym -> onOpenMonth("all", "_", ym) }
             }
         }
     }
+    flow.Dialogs()
 }
 
 @Composable
@@ -143,14 +176,31 @@ private fun DemoFolders() {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun FolderRow(count: Int, title: String, onClick: (() -> Unit)?, leading: @Composable () -> Unit) {
+internal fun FolderRow(
+    count: Int,
+    title: String,
+    onClick: (() -> Unit)?,
+    selected: Boolean? = null,
+    onLongClick: (() -> Unit)? = null,
+    leading: @Composable () -> Unit
+) {
     Row(
         Modifier.fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+            .then(if (selected == true) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)) else Modifier)
+            .then(
+                if (onClick != null || onLongClick != null)
+                    Modifier.combinedClickable(onClick = { onClick?.invoke() }, onLongClick = onLongClick)
+                else Modifier
+            )
             .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (selected != null) {
+            Checkbox(checked = selected, onCheckedChange = null)
+            Spacer(Modifier.width(8.dp))
+        }
         leading()
         Spacer(Modifier.width(14.dp))
         Text(title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))

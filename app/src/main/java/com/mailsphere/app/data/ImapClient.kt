@@ -9,6 +9,7 @@ import java.util.Properties
 import javax.mail.FetchProfile
 import javax.mail.Flags
 import javax.mail.Folder
+import com.sun.mail.imap.IMAPFolder
 import javax.mail.Multipart
 import javax.mail.Part
 import javax.mail.Session
@@ -198,6 +199,48 @@ object ImapClient {
                     }
                     db.insert(acc.email, items)
                     onProgress(arr.size)
+                }
+            } finally {
+                inbox.close(false)
+            }
+        } finally {
+            store.close()
+        }
+    }
+
+    private fun findTrash(store: Store): Folder? {
+        val all = store.defaultFolder.list("*")
+        all.firstOrNull { f -> (f as? IMAPFolder)?.attributes?.any { it.equals("\\Trash", ignoreCase = true) } == true }?.let { return it }
+        val names = listOf("[Gmail]/Trash", "[Google Mail]/Trash", "[Gmail]/Bin", "Trash", "Deleted Items", "Deleted Messages", "Bin", "INBOX.Trash")
+        for (n in names) all.firstOrNull { it.fullName.equals(n, ignoreCase = true) }?.let { return it }
+        return null
+    }
+
+    /**
+     * Moves messages (by UID) from INBOX to the provider's Trash folder: copy to Trash, flag, then expunge only these messages.
+     * Never deletes permanently. If no Trash folder is found nothing is touched. [onChunkDone] is called after each
+     * chunk of 100 succeeded on the server.
+     */
+    fun moveToTrash(acc: Account, token: String?, uids: List<Long>, onChunkDone: (List<Long>) -> Unit) {
+        val store = connect(acc, token)
+        try {
+            val trash = findTrash(store) ?: throw IllegalStateException("Trash folder not found - nothing was deleted")
+            val inbox = store.getFolder("INBOX")
+            inbox.open(Folder.READ_WRITE)
+            try {
+                val uf = inbox as UIDFolder
+                for (chunk in uids.chunked(100)) {
+                    val msgs = uf.getMessagesByUID(chunk.toLongArray()).filterNotNull().toTypedArray()
+                    if (msgs.isNotEmpty()) {
+                        inbox.copyMessages(msgs, trash)
+                        inbox.setFlags(msgs, Flags(Flags.Flag.DELETED), true)
+                        try {
+                            (inbox as IMAPFolder).expunge(msgs)
+                        } catch (e: Exception) {
+                            inbox.expunge()
+                        }
+                    }
+                    onChunkDone(chunk)
                 }
             } finally {
                 inbox.close(false)

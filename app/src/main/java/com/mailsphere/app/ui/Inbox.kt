@@ -1,7 +1,9 @@
 package com.mailsphere.app.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -29,6 +31,7 @@ import com.mailsphere.app.data.AccountStore
 import com.mailsphere.app.data.ComposeDraft
 import com.mailsphere.app.data.DemoData
 import com.mailsphere.app.data.DemoMail
+import com.mailsphere.app.data.Deleter
 import com.mailsphere.app.data.ImapClient
 import com.mailsphere.app.data.OAuth
 import com.mailsphere.app.data.toDemoMail
@@ -36,6 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun InboxScreen(onOpenSearch: () -> Unit, onOpenMessage: (String, Long) -> Unit, onCompose: () -> Unit) {
     val ctx = LocalContext.current
@@ -47,6 +51,13 @@ fun InboxScreen(onOpenSearch: () -> Unit, onOpenMessage: (String, Long) -> Unit,
     var real by remember { mutableStateOf<List<DemoMail>>(emptyList()) }
     var partial by remember { mutableStateOf<String?>(null) }
     var filter by rememberSaveable { mutableIntStateOf(0) }
+    val selected = remember { mutableStateListOf<String>() }
+    val selecting = selected.isNotEmpty()
+    BackHandler(enabled = selecting) { selected.clear() }
+    val flow = rememberDeleteFlow {
+        selected.clear()
+        refreshKey++
+    }
 
     LaunchedEffect(refreshKey) {
         loading = true
@@ -84,77 +95,122 @@ fun InboxScreen(onOpenSearch: () -> Unit, onOpenMessage: (String, Long) -> Unit,
         }
     }
     val labels = listOf(tr("الكل", "All"), tr("مهم", "Important"), tr("غير مقروءة", "Unread"), tr("المتابعة", "Follow-up"))
+    fun keyOf(m: DemoMail) = (m.account ?: "") + "|" + m.uid
+    fun toggle(k: String) {
+        if (k in selected) selected.remove(k) else selected.add(k)
+    }
 
     Box(Modifier.fillMaxSize()) {
-    Column(Modifier.fillMaxSize().screenInsets()) {
-        ScreenHeader(tr("صندوق البريد الموحد", "Unified Inbox"), tr("جميع حساباتك في مكان واحد", "All your accounts in one place"))
-        Column(Modifier.padding(horizontal = 16.dp)) {
-            if (isDemo) DemoBanner() else Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    tr("${accounts.size} حساب متصل — آخر 30 رسالة لكل حساب", "${accounts.size} account(s) connected — latest 30 messages each"),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
+        Column(Modifier.fillMaxSize().screenInsets()) {
+            if (selecting) {
+                SelectionBar(
+                    count = selected.size,
+                    onCancel = { selected.clear() },
+                    onSelectAll = { selected.clear(); selected.addAll(shown.map { keyOf(it) }) },
+                    onDelete = {
+                        flow.request(
+                            selected.map { it.substringBefore('|') to it.substringAfter('|').toLong() },
+                            tr("صندوق الوارد", "Inbox")
+                        )
+                    }
                 )
-                IconButton(onClick = { refreshKey++ }) { Icon(Icons.Filled.Refresh, tr("تحديث", "Refresh")) }
+            } else {
+                ScreenHeader(tr("صندوق البريد الموحد", "Unified Inbox"), tr("جميع حساباتك في مكان واحد", "All your accounts in one place"))
             }
-            partial?.let {
-                Text(tr("تعذّر تحديث بعض الحسابات: ", "Some accounts failed: ") + it.take(80), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                if (isDemo) DemoBanner() else Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        tr("${accounts.size} حساب متصل — آخر 30 رسالة لكل حساب. اضغط مطولًا على رسالة لتحديدها.", "${accounts.size} account(s) connected — latest 30 messages each. Long-press a message to select."),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = { refreshKey++ }) { Icon(Icons.Filled.Refresh, tr("تحديث", "Refresh")) }
+                }
+                partial?.let {
+                    Text(tr("تعذّر تحديث بعض الحسابات: ", "Some accounts failed: ") + it.take(80), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                Spacer(Modifier.height(12.dp))
+                Surface(
+                    onClick = onOpenSearch,
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(10.dp))
+                        Text(tr("ابحث في الرسائل...", "Search messages..."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
-            Spacer(Modifier.height(12.dp))
-            Surface(
-                onClick = onOpenSearch,
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.fillMaxWidth()
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.width(10.dp))
-                    Text(tr("ابحث في الرسائل...", "Search messages..."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                items(labels.size) { i ->
+                    FilterChip(selected = filter == i, onClick = { filter = i }, label = { Text(labels[i]) })
+                }
+            }
+            when {
+                loading -> LoadingState()
+                error != null -> ErrorState(error ?: "") { refreshKey++ }
+                shown.isEmpty() -> EmptyState(
+                    Icons.Filled.Email,
+                    tr("لا توجد رسائل هنا", "No messages here"),
+                    tr("هذا القسم لم يُنفَّذ بعد أو لا توجد رسائل مطابقة.", "This section is not implemented yet or has no matching messages.")
+                )
+                else -> LazyColumn {
+                    items(shown) { mail ->
+                        val k = keyOf(mail)
+                        val canAct = !isDemo && mail.account != null
+                        MailRow(
+                            mail, dotOnly = !isDemo,
+                            onClick = when {
+                                !canAct -> null
+                                selecting -> ({ toggle(k) })
+                                else -> ({ onOpenMessage(mail.account ?: "", mail.uid) })
+                            },
+                            onLongClick = if (canAct) ({ toggle(k) }) else null,
+                            selected = if (selecting) (k in selected) else null
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                    }
                 }
             }
         }
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(labels.size) { i ->
-                FilterChip(selected = filter == i, onClick = { filter = i }, label = { Text(labels[i]) })
-            }
-        }
-        when {
-            loading -> LoadingState()
-            error != null -> ErrorState(error ?: "") { refreshKey++ }
-            shown.isEmpty() -> EmptyState(
-                Icons.Filled.Email,
-                tr("لا توجد رسائل هنا", "No messages here"),
-                tr("هذا القسم لم يُنفَّذ بعد أو لا توجد رسائل مطابقة.", "This section is not implemented yet or has no matching messages.")
-            )
-            else -> LazyColumn {
-                items(shown) { mail ->
-                    val click: (() -> Unit)? = if (isDemo) null else mail.account?.let { a -> { onOpenMessage(a, mail.uid) } }
-                    MailRow(mail, dotOnly = !isDemo, onClick = click)
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-                }
-            }
+        if (!isDemo && !selecting) {
+            FloatingActionButton(
+                onClick = { ComposeDraft.reset(); onCompose() },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+            ) { Icon(Icons.Filled.Edit, tr("رسالة جديدة", "New message")) }
         }
     }
-    if (!isDemo) {
-        FloatingActionButton(
-            onClick = { ComposeDraft.reset(); onCompose() },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
-        ) { Icon(Icons.Filled.Edit, tr("رسالة جديدة", "New message")) }
-    }
-    }
+    flow.Dialogs()
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun MailRow(mail: DemoMail, dotOnly: Boolean = false, onClick: (() -> Unit)? = null) {
+fun MailRow(
+    mail: DemoMail,
+    dotOnly: Boolean = false,
+    onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
+    selected: Boolean? = null
+) {
     Row(
         Modifier.fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+            .then(if (selected == true) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)) else Modifier)
+            .then(
+                if (onClick != null || onLongClick != null)
+                    Modifier.combinedClickable(onClick = { onClick?.invoke() }, onLongClick = onLongClick)
+                else Modifier
+            )
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
+        if (selected != null) {
+            Checkbox(checked = selected, onCheckedChange = null)
+            Spacer(Modifier.width(8.dp))
+        }
         Avatar(mail.sender.firstOrNull()?.uppercase() ?: "?", mail.color)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {

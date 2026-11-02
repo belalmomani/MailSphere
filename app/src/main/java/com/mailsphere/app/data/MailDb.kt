@@ -97,6 +97,37 @@ class MailDb private constructor(ctx: Context) : SQLiteOpenHelper(ctx, "mail_ind
         }
     }
 
+    /** (account, uid) of every indexed message in a folder. period: null = whole folder, "yyyy" = a year, "yyyy-MM" = a month. key "_" = all. */
+    fun targets(type: String, key: String, period: String?): List<Pair<String, Long>> {
+        val where = mutableListOf<String>()
+        val args = mutableListOf<String>()
+        if (key != "_") {
+            where.add("${col(type)}=?")
+            args.add(key)
+        }
+        if (period != null) {
+            where.add(if (period.length == 4) "y=?" else "ym=?")
+            args.add(period)
+        }
+        val sql = "SELECT account, uid FROM messages" + (if (where.isEmpty()) "" else " WHERE " + where.joinToString(" AND "))
+        return readableDatabase.rawQuery(sql, if (args.isEmpty()) null else args.toTypedArray()).use {
+            val out = mutableListOf<Pair<String, Long>>()
+            while (it.moveToNext()) out.add(it.getString(0) to it.getLong(1))
+            out
+        }
+    }
+
+    fun deleteRows(account: String, uids: List<Long>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            for (u in uids) db.delete("messages", "account=? AND uid=?", arrayOf(account, u.toString()))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     fun messages(type: String, key: String, ym: String, limit: Int = 1500): List<MailItem> {
         val all = key == "_"
         val sql = "SELECT account, uid, sender, address, subject, date, unread FROM messages WHERE " +
