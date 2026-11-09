@@ -9,19 +9,33 @@ import android.database.sqlite.SQLiteOpenHelper
  * Local index of message HEADERS only (sender, subject, date, unread flag) in app-private storage.
  * Message bodies are never stored. Rows are removed when the account is removed.
  */
-class MailDb private constructor(ctx: Context) : SQLiteOpenHelper(ctx, "mail_index.db", null, 1) {
+class MailDb private constructor(ctx: Context) : SQLiteOpenHelper(ctx, "mail_index.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE messages (account TEXT NOT NULL, uid INTEGER NOT NULL, sender TEXT, address TEXT, subject TEXT, " +
-                "date INTEGER, unread INTEGER, skey TEXT, cat TEXT, y TEXT, ym TEXT, PRIMARY KEY(account, uid))"
+                "date INTEGER, unread INTEGER, skey TEXT, cat TEXT, y TEXT, ym TEXT, att INTEGER DEFAULT -1, PRIMARY KEY(account, uid))"
         )
         db.execSQL("CREATE INDEX idx_skey ON messages(skey)")
         db.execSQL("CREATE INDEX idx_cat ON messages(cat)")
         db.execSQL("CREATE INDEX idx_ym ON messages(ym)")
+        createAttachments(db)
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+    private fun createAttachments(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE attachments (account TEXT NOT NULL, uid INTEGER NOT NULL, idx INTEGER NOT NULL, name TEXT, size INTEGER, " +
+                "mime TEXT, kind TEXT, PRIMARY KEY(account, uid, idx))"
+        )
+        db.execSQL("CREATE INDEX idx_att_kind ON attachments(kind)")
+    }
+
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE messages ADD COLUMN att INTEGER DEFAULT -1")
+            createAttachments(db)
+        }
+    }
 
     private fun col(type: String) = if (type == "cat") "cat" else "skey"
 
@@ -59,6 +73,7 @@ class MailDb private constructor(ctx: Context) : SQLiteOpenHelper(ctx, "mail_ind
 
     fun deleteAccount(account: String) {
         writableDatabase.delete("messages", "account=?", arrayOf(account))
+        writableDatabase.delete("attachments", "account=?", arrayOf(account))
     }
 
     /** [total messages, distinct senders, distinct years] */
@@ -121,10 +136,116 @@ class MailDb private constructor(ctx: Context) : SQLiteOpenHelper(ctx, "mail_ind
         val db = writableDatabase
         db.beginTransaction()
         try {
-            for (u in uids) db.delete("messages", "account=? AND uid=?", arrayOf(account, u.toString()))
+            for (u in uids) {
+                db.delete("messages", "account=? AND uid=?", arrayOf(account, u.toString()))
+                db.delete("attachments", "account=? AND uid=?", arrayOf(account, u.toString()))
+            }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+        }
+    }
+
+    // ---------- attachments ----------
+
+    fun unscannedCount(account: String? = null): Int {
+        val sql = "SELECT COUNT(*) FROM messages WHERE att=-1" + (if (account != null) " AND account=?" else "")
+        return readableDatabase.rawQuery(sql, if (account != null) arrayOf(account) else null).use {
+            if (it.moveToFirst()) it.getInt(0) else 0
+        }
+    }
+
+    fun unscanned(account: String, limit: Int): List<Long> =
+        readableDatabase.rawQuery("SELECT uid FROM messages WHERE account=? AND att=-1 ORDER BY uid DESC LIMIT $limit", arrayOf(account)).use {
+            val out = mutableListOf<Long>()
+            while (it.moveToNext()) out.add(it.getLong(0))
+            out
+        }
+
+    fun saveAttachments(account: String, uid: Long, list: List<AttInfo>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("attachments", "account=? AND uid=?", arrayOf(account, uid.toString()))
+            list.forEachIndexed { i, a ->
+                val cv = ContentValues().apply {
+                    put("account", account); put("uid", uid); put("idx", i)
+                    put("name", a.name); put("size", a.size); put("mime", a.mime); put("kind", a.kind)
+                }
+                db.insertWithOnConflict("attachments", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+            }
+            val cv2 = ContentValues().apply { put("att", list.size) }
+            db.update("messages", cv2, "account=? AND uid=?", arrayOf(account, uid.toString()))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun attachmentTotal(): Int =
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM attachments", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+    private fun likeEscape(t: String) = "%" + t.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+    fun attachments(kind: String?, q: String, limit: Int = 500): List<AttRow> {
+        val where = mutableListOf<String>()
+        val args = mutableListOf<String>()
+        if (kind != null) {
+            where.add("a.kind=?")
+            args.add(kind)
+        }
+        for (t in q.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }) {
+            where.add("a.name LIKE ? ESCAPE '\\'")
+            args.add(likeEscape(t))
+        }
+        val sql = "SELECT a.account, a.uid, a.idx, a.name, a.size, a.kind, m.sender, m.date FROM attachments a " +
+            "JOIN messages m ON a.account=m.account AND a.uid=m.uid " +
+            (if (where.isEmpty()) "" else "WHERE " + where.joinToString(" AND ") + " ") +
+            "ORDER BY m.date DESC LIMIT $limit"
+        return readableDatabase.rawQuery(sql, if (args.isEmpty()) null else args.toTypedArray()).use {
+            val out = mutableListOf<AttRow>()
+            while (it.moveToNext()) {
+                out.add(AttRow(it.getString(0) ?: "", it.getLong(1), it.getInt(2), it.getString(3) ?: "", it.getLong(4), it.getString(5) ?: "other", it.getString(6) ?: "", it.getLong(7)))
+            }
+            out
+        }
+    }
+
+    // ---------- search (headers only: sender, address, subject, date) ----------
+
+    fun search(q: String, cat: String?, unreadOnly: Boolean, since: Long, hasAtt: Boolean, limit: Int = 500): List<MailItem> {
+        val where = mutableListOf<String>()
+        val args = mutableListOf<String>()
+        for (t in q.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }) {
+            val like = likeEscape(t)
+            where.add("(sender LIKE ? ESCAPE '\\' OR address LIKE ? ESCAPE '\\' OR subject LIKE ? ESCAPE '\\')")
+            args.add(like); args.add(like); args.add(like)
+        }
+        if (cat != null) {
+            where.add("cat=?")
+            args.add(cat)
+        }
+        if (unreadOnly) where.add("unread=1")
+        if (since > 0) {
+            where.add("date>=?")
+            args.add(since.toString())
+        }
+        if (hasAtt) where.add("att>0")
+        val sql = "SELECT account, uid, sender, address, subject, date, unread FROM messages" +
+            (if (where.isEmpty()) "" else " WHERE " + where.joinToString(" AND ")) + " ORDER BY date DESC LIMIT $limit"
+        return readableDatabase.rawQuery(sql, if (args.isEmpty()) null else args.toTypedArray()).use {
+            val out = mutableListOf<MailItem>()
+            while (it.moveToNext()) {
+                val millis = it.getLong(5)
+                out.add(
+                    MailItem(
+                        sender = it.getString(2) ?: "", subject = it.getString(4) ?: "", dateMillis = millis,
+                        unread = it.getInt(6) == 1, time = formatShortDate(millis),
+                        uid = it.getLong(1), account = it.getString(0) ?: "", senderAddress = it.getString(3) ?: ""
+                    )
+                )
+            }
+            out
         }
     }
 

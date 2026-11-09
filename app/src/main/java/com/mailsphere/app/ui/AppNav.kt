@@ -171,7 +171,10 @@ fun MailSphereApp(themeMode: Int, onThemeMode: (Int) -> Unit) {
             composable("vault") { VaultScreen() }
             composable("search") {
                 BackHandler(onBack = leaveTask)
-                SearchScreen(onBack = leaveTask)
+                SearchScreen(
+                    onBack = leaveTask,
+                    onOpenMessage = { e, u -> nav.navigate("message/" + Uri.encode(e) + "/" + u) }
+                )
             }
             composable("organize") {
                 BackHandler(onBack = leaveTask)

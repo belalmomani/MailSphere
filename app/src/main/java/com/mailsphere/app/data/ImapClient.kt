@@ -10,6 +10,7 @@ import javax.mail.FetchProfile
 import javax.mail.Flags
 import javax.mail.Folder
 import com.sun.mail.imap.IMAPFolder
+import java.io.File
 import javax.mail.Multipart
 import javax.mail.Part
 import javax.mail.Session
@@ -251,6 +252,92 @@ object ImapClient {
                 return chunk.filter { it !in still }
             } finally {
                 check.close(false)
+            }
+        } finally {
+            store.close()
+        }
+    }
+
+    // ---------- attachments ----------
+
+    private fun isAttachmentPart(p: Part): Boolean {
+        val d = p.disposition
+        return Part.ATTACHMENT.equals(d, ignoreCase = true) || (p.fileName != null && !Part.INLINE.equals(d, ignoreCase = true))
+    }
+
+    private fun walkAttachments(p: Part, out: MutableList<AttInfo>) {
+        if (p.isMimeType("multipart/*")) {
+            val mp = p.content as Multipart
+            for (i in 0 until mp.count) walkAttachments(mp.getBodyPart(i), out)
+        } else if (isAttachmentPart(p)) {
+            val raw = p.fileName
+            val name = if (raw == null) "attachment-" + (out.size + 1) else try { MimeUtility.decodeText(raw) } catch (e: Exception) { raw }
+            val mime = (p.contentType ?: "").substringBefore(';').trim().lowercase()
+            out.add(AttInfo(name, maxOf(p.size, 0).toLong(), mime, attachmentKind(name, mime)))
+        }
+    }
+
+    private fun findAttachment(p: Part, target: Int, counter: IntArray): Part? {
+        if (p.isMimeType("multipart/*")) {
+            val mp = p.content as Multipart
+            for (i in 0 until mp.count) {
+                findAttachment(mp.getBodyPart(i), target, counter)?.let { return it }
+            }
+            return null
+        }
+        if (isAttachmentPart(p)) {
+            if (counter[0] == target) return p
+            counter[0]++
+        }
+        return null
+    }
+
+    /** Reads only the MIME structure of the given messages (no attachment data) and stores the attachment list. */
+    fun scanAttachments(acc: Account, token: String?, uids: List<Long>, db: MailDb) {
+        val store = connect(acc, token)
+        try {
+            val inbox = store.getFolder("INBOX")
+            inbox.open(Folder.READ_ONLY)
+            try {
+                val uf = inbox as UIDFolder
+                val present = uf.getMessagesByUID(uids.toLongArray()).filterNotNull().toTypedArray()
+                val fp = FetchProfile()
+                fp.add(FetchProfile.Item.CONTENT_INFO)
+                fp.add(UIDFolder.FetchProfileItem.UID)
+                inbox.fetch(present, fp)
+                val found = HashSet<Long>()
+                for (m in present) {
+                    val uid = uf.getUID(m)
+                    found.add(uid)
+                    val list = mutableListOf<AttInfo>()
+                    try {
+                        walkAttachments(m, list)
+                    } catch (e: Exception) {
+                        // unreadable structure: treat as "no attachments" so the scan always progresses
+                    }
+                    db.saveAttachments(acc.email, uid, list)
+                }
+                for (u in uids) if (u !in found) db.saveAttachments(acc.email, u, emptyList())
+            } finally {
+                inbox.close(false)
+            }
+        } finally {
+            store.close()
+        }
+    }
+
+    /** Downloads ONE attachment (idx-th attachment of the message) into [dest]. */
+    fun downloadAttachment(acc: Account, token: String?, uid: Long, idx: Int, dest: File) {
+        val store = connect(acc, token)
+        try {
+            val inbox = store.getFolder("INBOX")
+            inbox.open(Folder.READ_ONLY)
+            try {
+                val m = (inbox as UIDFolder).getMessageByUID(uid) ?: throw IllegalStateException("Message not found")
+                val part = findAttachment(m, idx, intArrayOf(0)) ?: throw IllegalStateException("Attachment not found")
+                part.inputStream.use { ins -> dest.outputStream().use { out -> ins.copyTo(out) } }
+            } finally {
+                inbox.close(false)
             }
         } finally {
             store.close()
