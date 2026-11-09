@@ -35,6 +35,7 @@ object OAuth {
         val redirect = if (google) "com.mailsphere.app:/oauth2redirect" else "com.mailsphere.app://oauth2redirect"
         return AuthorizationRequest.Builder(cfg, clientId(ctx, provider), ResponseTypeValues.CODE, Uri.parse(redirect))
             .setScope(scope)
+            .setPrompt(AuthorizationRequest.Prompt.CONSENT)
             .build()
     }
 

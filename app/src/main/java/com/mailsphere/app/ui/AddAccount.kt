@@ -60,8 +60,13 @@ fun AddAccountScreen(onBack: () -> Unit, onDone: () -> Unit, onOpenGuide: () -> 
             service.performTokenRequest(resp.createTokenExchangeRequest()) { tokenResp, tokenEx ->
                 state.update(tokenResp, tokenEx)
                 val email = OAuth.emailFromIdToken(tokenResp?.idToken)
+                val granted = tokenResp?.scope
+                val needed = if (provider == "google") "mail.google.com" else "IMAP.AccessAsUser"
                 if (tokenResp == null || email == null) {
                     signInError = if (tokenResp == null) (tokenEx?.errorDescription ?: tokenEx?.error ?: "error") else "noemail"
+                    busy = false
+                } else if (granted != null && !granted.contains(needed)) {
+                    signInError = "noscope"
                     busy = false
                 } else {
                     val (host, port) = OAuth.imapHost(provider)
@@ -115,6 +120,7 @@ fun AddAccountScreen(onBack: () -> Unit, onDone: () -> Unit, onOpenGuide: () -> 
                 val msg = when (code) {
                     "cancelled" -> tr("تم الإلغاء.", "Cancelled.")
                     "noemail" -> tr("تعذّر قراءة البريد من الحساب.", "Could not read the email from the account.")
+                    "noscope" -> tr("لم تمنح صلاحية قراءة البريد. أعد المحاولة ووافق على كل الصلاحيات المعروضة (ضع علامة على كل الخانات).", "Mail permission was not granted. Try again and accept all permissions shown (tick every box).")
                     else -> tr("فشل تسجيل الدخول: ", "Sign-in failed: ") + code.take(120)
                 }
                 Text(msg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)

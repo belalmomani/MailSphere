@@ -45,7 +45,12 @@ object Smtp {
             put("mail.smtp.connectiontimeout", "15000")
             put("mail.smtp.timeout", "20000")
             put("mail.smtp.writetimeout", "20000")
-            if (token != null) put("mail.smtp.auth.mechanisms", "XOAUTH2")
+            if (token != null) {
+                put("mail.smtp.auth.mechanisms", "XOAUTH2")
+                put("mail.smtp.auth.xoauth2.disable", "false")
+                put("mail.smtp.auth.plain.disable", "true")
+                put("mail.smtp.auth.login.disable", "true")
+            }
         }
         val session = Session.getInstance(props)
         val msg = MimeMessage(session).apply {

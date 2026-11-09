@@ -119,6 +119,13 @@ fun ErrorState(message: String, onRetry: () -> Unit) {
         Text(tr("تعذّر جلب الرسائل", "Could not load messages"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Spacer(Modifier.height(6.dp))
         Text(message.take(160), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+        if (message.contains("AUTHENTICATIONFAILED", ignoreCase = true)) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                tr("جرّب: الإعدادات ← احذف الحساب، ثم أضفه من جديد ووافق على كل الصلاحيات المعروضة.", "Try: Settings → remove the account, then add it again and accept all permissions shown."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center
+            )
+        }
         Spacer(Modifier.height(16.dp))
         Button(onClick = onRetry) { Text(tr("إعادة المحاولة", "Retry")) }
     }

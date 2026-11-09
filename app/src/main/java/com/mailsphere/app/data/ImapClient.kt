@@ -52,7 +52,12 @@ object ImapClient {
             put("mail.imaps.ssl.enable", "true")
             put("mail.imaps.connectiontimeout", "15000")
             put("mail.imaps.timeout", "20000")
-            if (token != null) put("mail.imaps.auth.mechanisms", "XOAUTH2")
+            if (token != null) {
+                put("mail.imaps.auth.mechanisms", "XOAUTH2")
+                put("mail.imaps.auth.xoauth2.disable", "false")
+                put("mail.imaps.auth.plain.disable", "true")
+                put("mail.imaps.auth.login.disable", "true")
+            }
         }
         val store = Session.getInstance(props).getStore("imaps")
         store.connect(acc.host, acc.port, acc.email, token ?: acc.password)
