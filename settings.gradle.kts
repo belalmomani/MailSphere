@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "MailSphere"
+rootProject.name = "MafiaGame"
 include(":app")
