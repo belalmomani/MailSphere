@@ -50,6 +50,7 @@ fun InboxScreen(onOpenSearch: () -> Unit, onOpenMessage: (String, Long) -> Unit,
     var refreshKey by remember { mutableIntStateOf(0) }
     var real by remember { mutableStateOf<List<DemoMail>>(emptyList()) }
     var partial by remember { mutableStateOf<String?>(null) }
+    var follow by remember { mutableStateOf<List<DemoMail>>(emptyList()) }
     var filter by rememberSaveable { mutableIntStateOf(0) }
     val selected = remember { mutableStateListOf<String>() }
     val selecting = selected.isNotEmpty()
@@ -85,12 +86,18 @@ fun InboxScreen(onOpenSearch: () -> Unit, onOpenMessage: (String, Long) -> Unit,
         loading = false
     }
 
-    val base = if (isDemo) DemoData.mails else real
+    LaunchedEffect(filter, refreshKey, Deleter.version) {
+        if (filter == 3 && !isDemo) {
+            follow = withContext(Dispatchers.IO) { com.mailsphere.app.data.MailDb.get(ctx).followUps().map { it.toDemoMail() } }
+        }
+    }
+
+    val base = if (isDemo) DemoData.mails else if (filter == 3) follow else real
     val shown = base.filter {
         when (filter) {
             1 -> it.important
             2 -> it.unread > 0
-            3 -> false // "follow-up" is not implemented yet
+            3 -> true
             else -> true
         }
     }
@@ -158,7 +165,7 @@ fun InboxScreen(onOpenSearch: () -> Unit, onOpenMessage: (String, Long) -> Unit,
                 shown.isEmpty() -> EmptyState(
                     Icons.Filled.Email,
                     tr("لا توجد رسائل هنا", "No messages here"),
-                    tr("هذا القسم لم يُنفَّذ بعد أو لا توجد رسائل مطابقة.", "This section is not implemented yet or has no matching messages.")
+                    tr("لا توجد رسائل مطابقة. لوضع رسالة هنا افتحها واضغط «للمتابعة».", "No matching messages. To add one here, open it and tap “Follow up”.")
                 )
                 else -> LazyColumn {
                     items(shown) { mail ->

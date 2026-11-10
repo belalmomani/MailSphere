@@ -6,6 +6,12 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.launch
+import com.mailsphere.app.data.MailItem
+import com.mailsphere.app.data.PhishingCheck
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,6 +39,8 @@ fun MessageScreen(email: String, uid: Long, onBack: () -> Unit, onCompose: () ->
     var loading by remember { mutableStateOf(true) }
     var retry by remember { mutableIntStateOf(0) }
     var loadImages by remember { mutableStateOf(false) }
+    var followed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     val flow = rememberDeleteFlow { err -> if (err == null) onBack() }
     val thisMessageLabel = tr("هذه الرسالة", "this message")
@@ -42,6 +50,7 @@ fun MessageScreen(email: String, uid: Long, onBack: () -> Unit, onCompose: () ->
         error = null
         try {
             val acc = AccountStore.list(ctx).firstOrNull { it.email == email } ?: throw IllegalStateException("Account not found")
+            followed = withContext(Dispatchers.IO) { MailDb.get(ctx).isFollowUp(email, uid) }
             body = withContext(Dispatchers.IO) {
                 val token = if (acc.authState != null) OAuth.accessToken(ctx, acc) else null
                 ImapClient.fetchBody(acc, token, uid)
@@ -72,6 +81,32 @@ fun MessageScreen(email: String, uid: Long, onBack: () -> Unit, onCompose: () ->
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    val phish = remember(b) { PhishingCheck.analyze(b) }
+                    if (phish.level > 0) {
+                        val high = phish.level == 2
+                        Spacer(Modifier.height(8.dp))
+                        Column(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                .background(if (high) Color(0xFFFDE2E2) else Color(0xFFFFF4D6)).padding(12.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Warning, null, tint = if (high) Color(0xFFB42318) else Color(0xFF8A6100), modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    if (high) tr("رسالة مشبوهة: لا تضغط على الروابط ولا تُدخل بياناتك", "Suspicious message: do not click links or enter your details")
+                                    else tr("تنبيه: تحقق قبل الضغط على أي رابط", "Caution: verify before clicking any link"),
+                                    fontWeight = FontWeight.Bold, color = if (high) Color(0xFF7A1212) else Color(0xFF5C4100)
+                                )
+                            }
+                            phish.reasons.forEach { r ->
+                                Text("• " + r.t(), style = MaterialTheme.typography.bodySmall, color = if (high) Color(0xFF7A1212) else Color(0xFF5C4100))
+                            }
+                            Text(
+                                tr("هذه مؤشرات تلقائية وليست دليلًا قاطعًا.", "These are automatic indicators, not proof."),
+                                style = MaterialTheme.typography.labelSmall, color = if (high) Color(0xFF7A1212) else Color(0xFF5C4100)
+                            )
+                        }
+                    }
                     val plainText = (b.text ?: HtmlCompat.fromHtml(b.html ?: "", HtmlCompat.FROM_HTML_MODE_LEGACY).toString()).take(20000)
                     val wroteLine = tr("في ${b.date}، كتب ${b.from}:", "On ${b.date}, ${b.from} wrote:")
                     val fwdTitle = tr("رسالة محوّلة", "Forwarded message")
@@ -98,6 +133,15 @@ fun MessageScreen(email: String, uid: Long, onBack: () -> Unit, onCompose: () ->
                             onClick = { flow.request(listOf(email to uid), thisMessageLabel) },
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                         ) { Text(tr("حذف", "Delete")) }
+                        OutlinedButton(onClick = {
+                            val item = MailItem(
+                                sender = b.fromName.ifBlank { b.fromAddress }, subject = b.subject, dateMillis = b.dateMillis,
+                                unread = false, time = "", uid = uid, account = email, senderAddress = b.fromAddress
+                            )
+                            val now = !followed
+                            followed = now
+                            scope.launch { withContext(Dispatchers.IO) { MailDb.get(ctx).setFollowUp(item, now) } }
+                        }) { Text(if (followed) tr("إلغاء المتابعة", "Remove follow-up") else tr("للمتابعة", "Follow up")) }
                     }
                     if (b.html != null && !loadImages) {
                         Spacer(Modifier.height(8.dp))

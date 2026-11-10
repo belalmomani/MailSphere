@@ -28,7 +28,8 @@ data class MailItem(
 data class MailBody(
     val subject: String, val from: String, val date: String,
     val html: String?, val text: String?, val attachments: List<String>,
-    val replyAddress: String = "", val messageId: String? = null
+    val replyAddress: String = "", val messageId: String? = null,
+    val fromAddress: String = "", val fromName: String = "", val authResults: String = "", val dateMillis: Long = 0L
 )
 
 private val palette = listOf(0xFF3B82F6, 0xFF10A37F, 0xFFF59E0B, 0xFFEF4444, 0xFF6366F1, 0xFF0EA5E9, 0xFFF97316, 0xFF64748B)
@@ -157,7 +158,12 @@ object ImapClient {
                     attachments = att,
                     replyAddress = (m.replyTo?.firstOrNull() as? InternetAddress)?.address
                         ?: (m.from?.firstOrNull() as? InternetAddress)?.address ?: "",
-                    messageId = (m as? MimeMessage)?.messageID
+                    messageId = (m as? MimeMessage)?.messageID,
+                    fromAddress = (m.from?.firstOrNull() as? InternetAddress)?.address ?: "",
+                    fromName = (m.from?.firstOrNull() as? InternetAddress)?.personal ?: "",
+                    authResults = ((m.getHeader("Authentication-Results")?.toList() ?: emptyList()) +
+                        (m.getHeader("Received-SPF")?.toList() ?: emptyList())).joinToString(" ").lowercase(),
+                    dateMillis = date?.time ?: 0L
                 )
             } finally {
                 inbox.close(false)

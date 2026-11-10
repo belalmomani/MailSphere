@@ -9,7 +9,7 @@ import android.database.sqlite.SQLiteOpenHelper
  * Local index of message HEADERS only (sender, subject, date, unread flag) in app-private storage.
  * Message bodies are never stored. Rows are removed when the account is removed.
  */
-class MailDb private constructor(ctx: Context) : SQLiteOpenHelper(ctx, "mail_index.db", null, 2) {
+class MailDb private constructor(ctx: Context) : SQLiteOpenHelper(ctx, "mail_index.db", null, 3) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -20,6 +20,14 @@ class MailDb private constructor(ctx: Context) : SQLiteOpenHelper(ctx, "mail_ind
         db.execSQL("CREATE INDEX idx_cat ON messages(cat)")
         db.execSQL("CREATE INDEX idx_ym ON messages(ym)")
         createAttachments(db)
+        createFollowups(db)
+    }
+
+    private fun createFollowups(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE followups (account TEXT NOT NULL, uid INTEGER NOT NULL, sender TEXT, address TEXT, subject TEXT, " +
+                "date INTEGER, PRIMARY KEY(account, uid))"
+        )
     }
 
     private fun createAttachments(db: SQLiteDatabase) {
@@ -35,6 +43,7 @@ class MailDb private constructor(ctx: Context) : SQLiteOpenHelper(ctx, "mail_ind
             db.execSQL("ALTER TABLE messages ADD COLUMN att INTEGER DEFAULT -1")
             createAttachments(db)
         }
+        if (oldVersion < 3) createFollowups(db)
     }
 
     private fun col(type: String) = if (type == "cat") "cat" else "skey"
@@ -74,6 +83,7 @@ class MailDb private constructor(ctx: Context) : SQLiteOpenHelper(ctx, "mail_ind
     fun deleteAccount(account: String) {
         writableDatabase.delete("messages", "account=?", arrayOf(account))
         writableDatabase.delete("attachments", "account=?", arrayOf(account))
+        writableDatabase.delete("followups", "account=?", arrayOf(account))
     }
 
     /** [total messages, distinct senders, distinct years] */
@@ -139,12 +149,45 @@ class MailDb private constructor(ctx: Context) : SQLiteOpenHelper(ctx, "mail_ind
             for (u in uids) {
                 db.delete("messages", "account=? AND uid=?", arrayOf(account, u.toString()))
                 db.delete("attachments", "account=? AND uid=?", arrayOf(account, u.toString()))
+                db.delete("followups", "account=? AND uid=?", arrayOf(account, u.toString()))
             }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
         }
     }
+
+    // ---------- follow-ups ("needs a reply") ----------
+
+    fun isFollowUp(account: String, uid: Long): Boolean =
+        readableDatabase.rawQuery("SELECT 1 FROM followups WHERE account=? AND uid=?", arrayOf(account, uid.toString())).use { it.moveToFirst() }
+
+    fun setFollowUp(item: MailItem, on: Boolean) {
+        if (on) {
+            val cv = ContentValues().apply {
+                put("account", item.account); put("uid", item.uid); put("sender", item.sender)
+                put("address", item.senderAddress); put("subject", item.subject); put("date", item.dateMillis)
+            }
+            writableDatabase.insertWithOnConflict("followups", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+        } else {
+            writableDatabase.delete("followups", "account=? AND uid=?", arrayOf(item.account, item.uid.toString()))
+        }
+    }
+
+    fun followUps(): List<MailItem> =
+        readableDatabase.rawQuery("SELECT account, uid, sender, address, subject, date FROM followups ORDER BY date DESC", null).use {
+            val out = mutableListOf<MailItem>()
+            while (it.moveToNext()) {
+                val millis = it.getLong(5)
+                out.add(
+                    MailItem(
+                        sender = it.getString(2) ?: "", subject = it.getString(4) ?: "", dateMillis = millis, unread = false,
+                        time = formatShortDate(millis), uid = it.getLong(1), account = it.getString(0) ?: "", senderAddress = it.getString(3) ?: ""
+                    )
+                )
+            }
+            out
+        }
 
     // ---------- attachments ----------
 
