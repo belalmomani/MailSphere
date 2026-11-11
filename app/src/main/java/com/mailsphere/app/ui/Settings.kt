@@ -1,6 +1,13 @@
 package com.mailsphere.app.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.content.ContextCompat
+import com.mailsphere.app.notify.NotifyManager
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -68,6 +75,42 @@ fun SettingsScreen(
             listOf(tr("النظام", "System"), tr("فاتح", "Light"), tr("داكن", "Dark")).forEachIndexed { i, label ->
                 FilterChip(selected = themeMode == i, onClick = { onThemeMode(i) }, label = { Text(label) })
             }
+        }
+
+        SectionLabel(tr("الإشعارات", "Notifications"))
+        var notify by remember { mutableStateOf(NotifyManager.isEnabled(ctx)) }
+        val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                NotifyManager.enable(ctx)
+                notify = true
+            } else {
+                notify = false
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(tr("إشعارات البريد الجديد", "New-mail notifications"), fontWeight = FontWeight.SemiBold)
+                Text(
+                    tr("فحص دوري كل 15 دقيقة تقريبًا عند توفر الإنترنت. ليس فوريًا وقد يتأخر مع توفير البطارية.",
+                        "Periodic check about every 15 minutes when online. Not instant, and may be delayed by battery saving."),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(checked = notify, onCheckedChange = { on ->
+                if (on) {
+                    if (Build.VERSION.SDK_INT >= 33 &&
+                        ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        permLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        NotifyManager.enable(ctx)
+                        notify = true
+                    }
+                } else {
+                    NotifyManager.disable(ctx)
+                    notify = false
+                }
+            })
         }
 
         SectionLabel(tr("الخصوصية والإعلانات", "Privacy & ads"))

@@ -269,6 +269,49 @@ object ImapClient {
         }
     }
 
+    /**
+     * New messages in INBOX with UID greater than [last]. If [last] is 0 it only returns the current baseline UID
+     * (no messages), so the first background run never floods notifications.
+     */
+    fun newMessagesSince(acc: Account, token: String?, last: Long): Pair<List<MailItem>, Long> {
+        val store = connect(acc, token)
+        try {
+            val inbox = store.getFolder("INBOX")
+            inbox.open(Folder.READ_ONLY)
+            try {
+                val uf = inbox as UIDFolder
+                if (last <= 0L) return emptyList<MailItem>() to ((inbox as IMAPFolder).getUIDNext() - 1)
+                val msgs = uf.getMessagesByUID(last + 1, UIDFolder.LASTUID)
+                if (msgs.isEmpty()) return emptyList<MailItem>() to last
+                val take = msgs.takeLast(50).toTypedArray()
+                val fp = FetchProfile()
+                fp.add(FetchProfile.Item.ENVELOPE)
+                fp.add(FetchProfile.Item.FLAGS)
+                fp.add(UIDFolder.FetchProfileItem.UID)
+                inbox.fetch(take, fp)
+                val items = take.map { m ->
+                    val from = m.from?.firstOrNull() as? InternetAddress
+                    val date: Date? = m.sentDate ?: m.receivedDate
+                    MailItem(
+                        sender = from?.personal?.takeIf { it.isNotBlank() } ?: from?.address ?: "?",
+                        subject = m.subject ?: "",
+                        dateMillis = date?.time ?: 0L,
+                        unread = !m.isSet(Flags.Flag.SEEN),
+                        time = "",
+                        uid = uf.getUID(m),
+                        account = acc.email,
+                        senderAddress = from?.address ?: ""
+                    )
+                }.filter { it.uid > last }
+                return items to (items.maxOfOrNull { it.uid } ?: last)
+            } finally {
+                inbox.close(false)
+            }
+        } finally {
+            store.close()
+        }
+    }
+
     // ---------- attachments ----------
 
     private fun isAttachmentPart(p: Part): Boolean {

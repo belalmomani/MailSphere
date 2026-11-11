@@ -21,8 +21,8 @@ android {
         applicationId = "com.mailsphere.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 15
-        versionName = "1.10.0"
+        versionCode = 16
+        versionName = "1.11.0"
         resourceConfigurations += listOf("ar", "en")
         // OAuth redirect scheme used by AppAuth (Google + Microsoft sign-in)
         manifestPlaceholders["appAuthRedirectScheme"] = "com.mailsphere.app"
@@ -84,4 +84,6 @@ dependencies {
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     // Phase 4: OAuth sign-in (Google / Microsoft)
     implementation("net.openid:appauth:0.11.1")
+    // Phase 12: background check for new mail
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 }
